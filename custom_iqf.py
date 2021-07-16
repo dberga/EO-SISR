@@ -8,6 +8,7 @@ import torch
 import yaml
 # import kornia
 import numpy as np
+import PIL.Image as pil_image
 
 from glob import glob
 from typing import Any, Dict, Optional, List
@@ -19,8 +20,17 @@ from joblib import Parallel, delayed
 
 import torch.backends.cudnn as cudnn
 
+# MSRN
+from msrn.msrn import load_msrn_model, process_file_msrn
+    
+# FSRCNN
+from utils.utils_fsrcnn import convert_ycbcr_to_rgb, preprocess
 from models.model_fsrcnn import FSRCNN
-from models import models_liif
+
+# LIIF
+# from models.liif import models
+# from models import models_liif
+# from models_liif import modelsliif
 # from config.config_srcnn import Config_srcnn
 # from testing.test_fsrcnn import test_fsrcnn
 
@@ -49,7 +59,7 @@ class ModelConfS3Loader():
         self.bucket_name        =  bucket_name
         self.algo               =  algo
         
-    def load_ai_model_and_stuff(self):
+    def load_ai_model_and_stuff(self) -> List[Any]:
         
         # Rename to full bucket subdirs...
         # First file is the model
@@ -106,14 +116,21 @@ class ModelConfS3Loader():
                 ), args, os.path.join(
                     tmpdirname ,"conf1"
                 ) )
-
+                
+            elif self.algo=='MSRN':
+                
+                args = None
+                model = self._load_model_msrn(
+                    os.path.join(tmpdirname ,"model")
+                )
+                
             else:
                 print(f"Error: unknown algo: {self.algo}")
                 raise
 
             return model , args
     
-    def _load_args( self, config_fn ):
+    def _load_args( self, config_fn: str ) -> Any:
         """Load Args"""
 
         args = Args()
@@ -126,12 +143,12 @@ class ModelConfS3Loader():
 
         return args
     
-    def _load_model_fsrcnn( self, model_fn, args ):
+    def _load_model_fsrcnn( self, model_fn: str,args: Any ) -> Any:
         """Load Model"""
 
         cudnn.benchmark = True
         device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
+        
         model = FSRCNN(scale_factor=args.scale).to(device)
 
         state_dict = model.state_dict()
@@ -145,7 +162,7 @@ class ModelConfS3Loader():
 
         return model
     
-    def _load_model_liif(self,model_fn,args,yml_fn):
+    def _load_model_liif(self,model_fn: str,args: Any,yml_fn: str) -> Any:
         """Load Model"""
 
         os.environ['CUDA_VISIBLE_DEVICES'] = "0"
@@ -168,6 +185,10 @@ class ModelConfS3Loader():
         model.eval()
         
         return model
+    
+    def _load_model_msrn(self,model_fn: str) -> Any:
+        """Load MSRN Model"""
+        return load_msrn_model(model_fn)
 
 #########################
 # Custom IQF
@@ -189,12 +210,13 @@ class DSModifierLIIF(DSModifier):
         self,
         ds_modifier: Optional[DSModifier] = None,
         params: Dict[str, Any] = {
+            "algo":"LIIF",
             "config": ["LIIF_config.json","test_liif.yaml"],
             "model": "liif_UCMerced/epoch-best.pth"
         },
     ):
-        
-        algo = params['algo']
+        params['algo'] = 'LIIF'
+        algo           = params['algo']
         
         subname = algo + '_' + os.path.splitext(params['config'][0])[0]+'_'+os.path.splitext(params['model'])[0].replace('/','-')
         self.name = f"sisr+{subname}"
@@ -219,7 +241,6 @@ class DSModifierLIIF(DSModifier):
     def _ds_input_modification(self, data_input: str, mod_path: str) -> str:
         """Modify images
         Iterates the data_input path loading images, processing with _mod_img(), and saving to mod_path
-
         Args
             data_input: str. Path of the original folder containing images
             mod_path: str. Path to the new dataset
@@ -266,17 +287,17 @@ class DSModifierLIIF(DSModifier):
 
         pbar = tqdm(loader, leave=False, desc='val')
         count = 0
-        for batch in pbar:
+        for enu,batch in enumerate(pbar):
             
             try:
                 imgp = self._mod_img( batch )
-                cv2.imwrite( os.path.join(dst, imgset_subdir+'+'+self.params['algo']+'.png'), imgp )
+                cv2.imwrite( os.path.join(dst, f"{enu}"+'+'+self.params['algo']+'.png'), imgp )
             except Exception as e:
                 print(e)
             
         return input_name
 
-    def _mod_img(self, image_file: str) -> None:
+    def _mod_img(self, batch: Any) -> None:
 
         for k, v in batch.items():
             batch[k] = v.cuda()
@@ -309,14 +330,16 @@ class DSModifierFSRCNN(DSModifier):
         self,
         ds_modifier: Optional[DSModifier] = None,
         params: Dict[str, Any] = {
-            "config": "hrn_exp27.json",
-            "model": "exp27/HRNet_30.pth"
+            "algo":"FSRCNN",
+            "config": ["test.json"],
+            "model": "FSRCNN_1to033_x3_noblur/best.pth"
         },
     ):
         
-        algo = params['algo']
+        params['algo'] = 'FSRCNN'
+        algo           = params['algo']
         
-        subname = algo + '_' + os.path.splitext(params['config'])[0]+'_'+os.path.splitext(params['model'])[0].replace('/','-')
+        subname = algo + '_' + os.path.splitext(params['config'][0])[0]+'_'+os.path.splitext(params['model'])[0].replace('/','-')
         self.name = f"sisr+{subname}"
         
         self.params: Dict[str, Any] = params
@@ -330,6 +353,7 @@ class DSModifierFSRCNN(DSModifier):
                 algo          = "FSRCNN"
         )
         
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         self.model, self.args = model_conf.load_ai_model_and_stuff()
         
     def _ds_input_modification(self, data_input: str, mod_path: str) -> str:
@@ -348,17 +372,19 @@ class DSModifierFSRCNN(DSModifier):
         
         print(f'For each image file in <{data_input}>...')
         
-        for image_file in os.listdir( data_input ):
+        for image_file in glob( os.path.join(data_input,'*.tif') ):
 
             try:
                 imgp = self._mod_img( image_file )
-                cv2.imwrite( os.path.join(dst, imgset_subdir+'+'+self.params['algo']+'.png'), imgp )
+                cv2.imwrite( os.path.join(dst, os.path.basename(image_file)+'+'+self.params['algo']+'.tif'), imgp )
             except Exception as e:
                 print(e)
-            
+        
+        print('Done.')
+        
         return input_name
 
-    def _mod_img(self, image_file: str) -> None:
+    def _mod_img(self, image_file: str) -> np.array:
         
         args = self.args
         model = self.model
@@ -371,11 +397,9 @@ class DSModifierFSRCNN(DSModifier):
         hr = image.resize((image_width, image_height), resample=pil_image.BICUBIC)
         lr = hr.resize((hr.width // args.scale, hr.height // args.scale), resample=pil_image.BICUBIC)
         bicubic = lr.resize((lr.width * args.scale, lr.height * args.scale), resample=pil_image.BICUBIC)
-        #bicubic.save(args.image_file.replace('.', '_bicubic_x{}.'.format(args.scale)))
-        bicubic.save(join(args.save_path, 'bicubic_x{}_'.format(args.scale) + image_file.split('/')[-1]))
 
-        lr, _ = preprocess(lr, device)
-        _, ycbcr = preprocess(bicubic, device)
+        lr, _ = preprocess(lr, self.device)
+        _, ycbcr = preprocess(bicubic, self.device)
 
         with torch.no_grad():
             preds = model(lr).clamp(0.0, 1.0)
@@ -387,6 +411,95 @@ class DSModifierFSRCNN(DSModifier):
         
         return output
 
+class DSModifierMSRN(DSModifier):
+    """
+    Class derived from DSModifier that modifies a dataset iterating its folder.
+
+    Args:
+        ds_modifer: DSModifier. Composed modifier child
+
+    Attributes:
+        name: str. Name of the modifier
+        ds_modifer: DSModifier. Composed modifier child
+        params: dict. Contains metainfomation of the modifier
+    """
+    def __init__(
+        self,
+        ds_modifier: Optional[DSModifier] = None,
+        params: Dict[str, Any] = {
+            "algo":"MSRN",
+            "zoom": 3,
+            "config": [],
+            "model": "MSRN/SISR_MSRN_X2_BICUBIC.pth"
+        },
+    ):
+        
+        params['algo'] = 'MSRN'
+        algo           = params['algo']
+        
+        self.name = f"mfsr+{algo}_modifier"
+        
+        self.params: Dict[str, Any] = params
+        self.ds_modifier = ds_modifier
+        self.params.update({"modifier": "{}".format(self._get_name())})
+        
+        model_conf = ModelConfS3Loader(
+                model_fn      = params['model'],
+                config_fn_lst = [],
+                bucket_name   = "image-quality-framework",
+                algo          = "MSRN"
+        )
+        
+        self.model,_ = model_conf.load_ai_model_and_stuff()
+        
+    def _ds_input_modification(self, data_input: str, mod_path: str) -> str:
+        """Modify images
+        Iterates the data_input path loading images, processing with _mod_img(), and saving to mod_path
+
+        Args
+            data_input: str. Path of the original folder containing images
+            mod_path: str. Path to the new dataset
+        Returns:
+            Name of the new folder containign the images
+        """
+        input_name = os.path.basename(data_input)
+        dst = os.path.join(mod_path, input_name)
+        os.makedirs(dst, exist_ok=True)
+        
+        print(f'For each image file in <{data_input}>...')
+        
+        for image_file in glob( os.path.join(data_input,'*.tif') ):
+
+            try:
+                imgp = self._mod_img( image_file )
+                cv2.imwrite( os.path.join(dst, os.path.basename(image_file)+'+'+self.params['algo']+'.tif'), imgp )
+            except Exception as e:
+                print(e)
+        
+        print('Done.')
+        
+        return input_name
+
+    def _mod_img(self, image_file: str) -> np.array:
+        
+        zoom       = self.params["zoom"]
+        loaded     = cv2.imread(image_file, -1)
+        wind_size  = loaded.shape[1]
+        gpu_device = "0"
+        res_output = 1/zoom # inria resolution
+
+        rec_img = process_file_msrn(
+            loaded,
+            self.model,
+            compress=True,
+            res_output=res_output,
+            wind_size=wind_size+10, stride=wind_size+10,
+            scale=2,
+            batch_size=1,
+            padding=5
+        )
+        
+        return rec_img
 
 #########################
 # Similarity Metrics
@@ -394,8 +507,8 @@ class DSModifierFSRCNN(DSModifier):
     
 class SimilarityMetrics( Metric ):
     
-    def __init__( self, experiment_info: ExperimentInfo, cut: Optional[int] = 6 ) -> None:
-        self.metric_names = ['ssim','psnr','gmsd','mdsi','haarpsi']
+    def __init__( self, experiment_info: ExperimentInfo ) -> None:
+        self.metric_names = ['ssim','psnr','gmsd','mdsi','haarpsi','fid']
         self.cut = cut
         self.experiment_info = experiment_info
         
@@ -406,7 +519,6 @@ class SimilarityMetrics( Metric ):
         
         # These are actually attributes from ds_wrapper
         self.data_path = os.path.dirname(gt_path)
-        self.parent_folder = os.path.dirname(self.data_path)
         
         # predictions be like /mlruns/1/6f1b6d86e42d402aa96665e63c44ef91/artifacts'
         guessed_run_id = predictions.split(os.sep)[-3]
@@ -416,23 +528,20 @@ class SimilarityMetrics( Metric ):
             if self.experiment_info.runs[k]['run_id']==guessed_run_id
         ][0]
         
-        pred_fn_lst = glob(os.path.join( self.parent_folder, modifier_subfold,'L0','*.png' ))
+        pred_fn_lst = glob(os.path.join( self.data_path,'test','*.tif' ))
         stats = { met:0.0 for met in self.metric_names }
         cut = self.cut
+        
+        fid = piq.FID()
         
         for pred_fn in pred_fn_lst:
             
             # pred_fn be like: xview_id1529imgset0012+hrn.png
-            subdir = os.path.basename(pred_fn).split('+')[0]
-            gt_fn = glob( os.path.join(self.data_path,"L0",f"{subdir}","HR.png") )[0]
+            img_name = os.path.basename(pred_fn)
+            gt_fn = os.path.join(self.data_path,"test",f"{img_name}")
             
             pred = cv2.imread( pred_fn )/255
             gt = cv2.imread( gt_fn )/255
-            
-            pred = ( pred[...,0] if len(pred.shape)==3 else pred )
-            gt = ( gt[...,0] if len(gt.shape)==3 else gt )
-            
-            gt = gt[cut:-cut,cut:-cut]
             
             pred = torch.from_numpy( pred )
             gt = torch.from_numpy( gt )
@@ -440,12 +549,20 @@ class SimilarityMetrics( Metric ):
             pred = pred.view(1,-1,pred.shape[-2],pred.shape[-1])
             gt = gt.view(1,-1,gt.shape[-2],gt.shape[-1])
             
-            stats['ssim']+= piq.ssim(pred,gt).item()
-            stats['psnr']+= piq.psnr(pred,gt).item()
-            stats['gmsd']+= piq.gmsd(pred,gt).item()
-            stats['mdsi']+= piq.mdsi(pred,gt).item()
+            pred = torch.transpose( pred, 3, 1 )
+            gt   = torch.transpose( gt  , 3, 1 )
+            
+            stats['ssim'] += piq.ssim(pred,gt).item()
+            stats['psnr'] += piq.psnr(pred,gt).item()
+            stats['gmsd'] += piq.gmsd(pred,gt).item()
+            stats['mdsi'] += piq.mdsi(pred,gt).item()
             stats['haarpsi']+= piq.haarpsi(pred,gt).item()
-        
+            
+            stats['fid'] += np.sum( [
+                fid( torch.squeeze(pred)[i,...], torch.squeeze(gt)[i,...] ).item()
+                for i in range( pred.shape[1] )
+            ] ) / pred.shape[1]
+            
         for k in stats:
             # If there are results for the given modifier...
             if len(pred_fn_lst)!=0:
