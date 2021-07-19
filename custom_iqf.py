@@ -7,10 +7,15 @@ import piq
 import torch
 import yaml
 # import kornia
+import signal
+import time
+import math
+
 import numpy as np
 import PIL.Image as pil_image
 
 from glob import glob
+from torch.utils.data import DataLoader
 from typing import Any, Dict, Optional, List
 from iq_tool_box.datasets import DSModifier
 from iq_tool_box.metrics import Metric
@@ -22,17 +27,26 @@ import torch.backends.cudnn as cudnn
 
 # MSRN
 from msrn.msrn import load_msrn_model, process_file_msrn
-    
+
 # FSRCNN
 from utils.utils_fsrcnn import convert_ycbcr_to_rgb, preprocess
 from models.model_fsrcnn import FSRCNN
 
 # LIIF
-# from models.liif import models
+from datasets.liif import datasets
+from utils import utils_liif
+from models.liif import models as models_liif
 # from models import models_liif
 # from models_liif import modelsliif
 # from config.config_srcnn import Config_srcnn
 # from testing.test_fsrcnn import test_fsrcnn
+
+class TimeOutException(Exception):
+    pass
+
+def alarm_handler(signum, frame):
+    print("ALARM signal received")
+    raise TimeOutException()
 
 class Args():
     def __init__(self):
@@ -111,7 +125,7 @@ class ModelConfS3Loader():
                 args = self._load_args(os.path.join(
                     tmpdirname ,"conf0"
                 ))
-                model,loader = self._load_model_liif(os.path.join(
+                model = self._load_model_liif(os.path.join(
                     tmpdirname ,"model"
                 ), args, os.path.join(
                     tmpdirname ,"conf1"
@@ -164,7 +178,7 @@ class ModelConfS3Loader():
     
     def _load_model_liif(self,model_fn: str,args: Any,yml_fn: str) -> Any:
         """Load Model"""
-
+        
         os.environ['CUDA_VISIBLE_DEVICES'] = "0"
         
         with open(yml_fn, 'r') as f:
@@ -211,14 +225,15 @@ class DSModifierLIIF(DSModifier):
         ds_modifier: Optional[DSModifier] = None,
         params: Dict[str, Any] = {
             "algo":"LIIF",
-            "config": ["LIIF_config.json","test_liif.yaml"],
+            "config0": "LIIF_config.json",
+            "config1": "test_liif.yaml",
             "model": "liif_UCMerced/epoch-best.pth"
         },
     ):
         params['algo'] = 'LIIF'
         algo           = params['algo']
         
-        subname = algo + '_' + os.path.splitext(params['config'][0])[0]+'_'+os.path.splitext(params['model'])[0].replace('/','-')
+        subname = algo + '_' + os.path.splitext(params['config0'])[0]+ '_' + os.path.splitext(params['config1'])[0]+'_'+os.path.splitext(params['model'])[0].replace('/','-')
         self.name = f"sisr+{subname}"
         
         self.params: Dict[str, Any] = params
@@ -227,7 +242,7 @@ class DSModifierLIIF(DSModifier):
         
         model_conf = ModelConfS3Loader(
                 model_fn      = params['model'],
-                config_fn_lst = params['config'],
+                config_fn_lst = [params['config0'],params['config1']],
                 bucket_name   = "image-quality-framework",
                 algo          = "LIIF"
         )
@@ -253,7 +268,17 @@ class DSModifierLIIF(DSModifier):
         
         print(f'For each image file in <{data_input}>...')
         
+        data_norm, eval_type, eval_bsize = None,None, None
+        
         spec = self.spec
+        
+        spec['dataset'] = {
+            'name': 'image-folder',
+            'args': {
+                'root_path': data_input
+            }
+        }
+        
         dataset = datasets.make(spec['dataset'])
         dataset = datasets.make(spec['wrapper'], args={'dataset': dataset})
         loader = DataLoader(dataset, batch_size=spec['batch_size'],
@@ -272,32 +297,33 @@ class DSModifierLIIF(DSModifier):
         gt_div = torch.FloatTensor(t['div']).view(1, 1, -1).cuda()
 
         if eval_type is None:
-            metric_fn = utils.calc_psnr
+            metric_fn = utils_liif.calc_psnr
         elif eval_type.startswith('div2k'):
             scale = int(eval_type.split('-')[1])
-            metric_fn = partial(utils.calc_psnr, dataset='div2k', scale=scale)
+            metric_fn = partial(utils_liif.calc_psnr, dataset='div2k', scale=scale)
         elif eval_type.startswith('benchmark'):
             scale = int(eval_type.split('-')[1])
-            metric_fn = partial(utils.calc_psnr, dataset='benchmark', scale=scale)
+            metric_fn = partial(utils_liif.calc_psnr, dataset='benchmark', scale=scale)
         else:
             raise NotImplementedError
 
-        val_res = utils.Averager()
-        val_ssim = utils.Averager() #test
+        val_res = utils_liif.Averager()
+        val_ssim = utils_liif.Averager() #test
 
-        pbar = tqdm(loader, leave=False, desc='val')
+        #pbar = tqdm(loader, leave=False, desc='val')
         count = 0
-        for enu,batch in enumerate(pbar):
+        for enu,batch in enumerate(loader):
             
             try:
-                imgp = self._mod_img( batch )
+                imgp = self._mod_img( batch, inp_sub, inp_div, eval_bsize,gt_div , gt_sub )
+                print(imgp.shape)
                 cv2.imwrite( os.path.join(dst, f"{enu}"+'+'+self.params['algo']+'.png'), imgp )
             except Exception as e:
                 print(e)
             
         return input_name
 
-    def _mod_img(self, batch: Any) -> None:
+    def _mod_img(self, batch: Any, inp_sub: Any, inp_div: Any, eval_bsize: Any, gt_div: Any, gt_sub: Any) -> None:
 
         for k, v in batch.items():
             batch[k] = v.cuda()
@@ -311,8 +337,12 @@ class DSModifierLIIF(DSModifier):
                                    batch['coord'], batch['cell'], eval_bsize)
         pred = pred * gt_div + gt_sub
         pred.clamp_(0, 1)
-        
-        return pred.detach().cpu().numpy()
+        ih, iw = batch['inp'].shape[-2:]
+        s = math.sqrt(batch['coord'].shape[1] / (ih * iw))
+        shape = [batch['inp'].shape[0], round(ih * s), round(iw * s), 3]
+        pred = pred.view(*shape) \
+            .permute(0, 1, 2, 3).contiguous()
+        return pred.detach().cpu().numpy().squeeze()
 
 class DSModifierFSRCNN(DSModifier):
     """
@@ -331,7 +361,7 @@ class DSModifierFSRCNN(DSModifier):
         ds_modifier: Optional[DSModifier] = None,
         params: Dict[str, Any] = {
             "algo":"FSRCNN",
-            "config": ["test.json"],
+            "config": "test.json",
             "model": "FSRCNN_1to033_x3_noblur/best.pth"
         },
     ):
@@ -339,7 +369,7 @@ class DSModifierFSRCNN(DSModifier):
         params['algo'] = 'FSRCNN'
         algo           = params['algo']
         
-        subname = algo + '_' + os.path.splitext(params['config'][0])[0]+'_'+os.path.splitext(params['model'])[0].replace('/','-')
+        subname = algo + '_' + os.path.splitext(params['config'])[0]+'_'+os.path.splitext(params['model'])[0].replace('/','-')
         self.name = f"sisr+{subname}"
         
         self.params: Dict[str, Any] = params
@@ -348,7 +378,7 @@ class DSModifierFSRCNN(DSModifier):
 
         model_conf = ModelConfS3Loader(
                 model_fn      = params['model'],
-                config_fn_lst = params['config'],
+                config_fn_lst = [params['config']],
                 bucket_name   = "image-quality-framework",
                 algo          = "FSRCNN"
         )
@@ -376,6 +406,7 @@ class DSModifierFSRCNN(DSModifier):
 
             try:
                 imgp = self._mod_img( image_file )
+                print( imgp.shape )
                 cv2.imwrite( os.path.join(dst, os.path.basename(image_file)+'+'+self.params['algo']+'.tif'), imgp )
             except Exception as e:
                 print(e)
@@ -429,7 +460,6 @@ class DSModifierMSRN(DSModifier):
         params: Dict[str, Any] = {
             "algo":"MSRN",
             "zoom": 3,
-            "config": [],
             "model": "MSRN/SISR_MSRN_X2_BICUBIC.pth"
         },
     ):
@@ -469,12 +499,20 @@ class DSModifierMSRN(DSModifier):
         print(f'For each image file in <{data_input}>...')
         
         for image_file in glob( os.path.join(data_input,'*.tif') ):
-
+            
+            signal.signal(signal.SIGALRM, alarm_handler)
+            signal.alarm(5)
+            
             try:
                 imgp = self._mod_img( image_file )
+                print( imgp.shape )
                 cv2.imwrite( os.path.join(dst, os.path.basename(image_file)+'+'+self.params['algo']+'.tif'), imgp )
+            except TimeOutException as ex:
+                print(ex)
             except Exception as e:
                 print(e)
+            
+            signal.alarm(0)
         
         print('Done.')
         
@@ -487,7 +525,7 @@ class DSModifierMSRN(DSModifier):
         wind_size  = loaded.shape[1]
         gpu_device = "0"
         res_output = 1/zoom # inria resolution
-
+        
         rec_img = process_file_msrn(
             loaded,
             self.model,
@@ -509,7 +547,6 @@ class SimilarityMetrics( Metric ):
     
     def __init__( self, experiment_info: ExperimentInfo ) -> None:
         self.metric_names = ['ssim','psnr','gmsd','mdsi','haarpsi','fid']
-        self.cut = cut
         self.experiment_info = experiment_info
         
     def apply(self, predictions: str, gt_path: str) -> Any:
@@ -521,20 +558,22 @@ class SimilarityMetrics( Metric ):
         self.data_path = os.path.dirname(gt_path)
         
         # predictions be like /mlruns/1/6f1b6d86e42d402aa96665e63c44ef91/artifacts'
-        guessed_run_id = predictions.split(os.sep)[-3]
-        modifier_subfold = [
-            k
-            for k in self.experiment_info.runs
-            if self.experiment_info.runs[k]['run_id']==guessed_run_id
-        ][0]
+        # guessed_run_id = predictions.split(os.sep)[-3]
+        # modifier_subfold = [
+        #     k
+        #     for k in self.experiment_info.runs
+        #     if self.experiment_info.runs[k]['run_id']==guessed_run_id
+        # ][0]
         
         pred_fn_lst = glob(os.path.join( self.data_path,'test','*.tif' ))
         stats = { met:0.0 for met in self.metric_names }
-        cut = self.cut
         
         fid = piq.FID()
         
-        for pred_fn in pred_fn_lst:
+        for enu,pred_fn in enumerate(pred_fn_lst):
+            
+            if enu%100==0:
+                print(f'Estimating similarity metrics {enu//100}/{len(pred_fn_lst)//100}...')
             
             # pred_fn be like: xview_id1529imgset0012+hrn.png
             img_name = os.path.basename(pred_fn)
