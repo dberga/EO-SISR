@@ -6,7 +6,6 @@ import cv2
 import piq
 import torch
 import yaml
-# import kornia
 import signal
 import time
 import math
@@ -16,7 +15,7 @@ import PIL.Image as pil_image
 
 from glob import glob
 from torch.utils.data import DataLoader
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, Optional, List,Union,Tuple
 from iq_tool_box.datasets import DSModifier
 from iq_tool_box.metrics import Metric
 from iq_tool_box.experiments import ExperimentInfo
@@ -24,6 +23,8 @@ from iq_tool_box.experiments import ExperimentInfo
 from joblib import Parallel, delayed
 
 import torch.backends.cudnn as cudnn
+
+from lowresgen import LRSimulator
 
 # MSRN
 from msrn.msrn import load_msrn_model, process_file_msrn
@@ -33,13 +34,16 @@ from utils.utils_fsrcnn import convert_ycbcr_to_rgb, preprocess
 from models.model_fsrcnn import FSRCNN
 
 # LIIF
-from datasets.liif import datasets
+from datasets.liif import datasets as datasets_liif
 from utils import utils_liif
 from models.liif import models as models_liif
 # from models import models_liif
 # from models_liif import modelsliif
 # from config.config_srcnn import Config_srcnn
 # from testing.test_fsrcnn import test_fsrcnn
+
+# Metrics
+from swd import SlicedWassersteinDistance
 
 class TimeOutException(Exception):
     pass
@@ -51,7 +55,7 @@ def alarm_handler(signum, frame):
 class Args():
     def __init__(self):
         pass
-
+    
 class ModelConfS3Loader():
     
     def __init__(
@@ -188,10 +192,6 @@ class ModelConfS3Loader():
         # Save config and spec in self
         self.config = config
         self.spec = spec
-        #dataset = datasets.make(spec['dataset'])
-        #dataset = datasets.make(spec['wrapper'], args={'dataset': dataset})
-        #loader = DataLoader(dataset, batch_size=spec['batch_size'],
-        #                    num_workers=8, pin_memory=True)
         
         model_spec = torch.load(model_fn)['model']
         model = models_liif.make(model_spec, load_sd=True).cuda()
@@ -233,7 +233,11 @@ class DSModifierLIIF(DSModifier):
         params['algo'] = 'LIIF'
         algo           = params['algo']
         
-        subname = algo + '_' + os.path.splitext(params['config0'])[0]+ '_' + os.path.splitext(params['config1'])[0]+'_'+os.path.splitext(params['model'])[0].replace('/','-')
+        subname = algo + '_' + \
+                    os.path.splitext(params['config0'])[0]+ \
+                    '_' + os.path.splitext(params['config1'])[0]+ \
+                    '_'+os.path.splitext(params['model'])[0].replace('/','-')
+        
         self.name = f"sisr+{subname}"
         
         self.params: Dict[str, Any] = params
@@ -272,6 +276,8 @@ class DSModifierLIIF(DSModifier):
         
         spec = self.spec
         
+        spec['batch_size'] = 1
+        
         spec['dataset'] = {
             'name': 'image-folder',
             'args': {
@@ -279,22 +285,22 @@ class DSModifierLIIF(DSModifier):
             }
         }
         
-        dataset = datasets.make(spec['dataset'])
-        dataset = datasets.make(spec['wrapper'], args={'dataset': dataset})
+        dataset = datasets_liif.make(spec['dataset'])
+        dataset = datasets_liif.make(spec['wrapper'], args={'dataset': dataset})
         loader = DataLoader(dataset, batch_size=spec['batch_size'],
                            num_workers=8, pin_memory=True)
         
         if data_norm is None:
+        
             data_norm = {
                 'inp': {'sub': [0], 'div': [1]},
                 'gt': {'sub': [0], 'div': [1]}
             }
-        t = data_norm['inp']
-        inp_sub = torch.FloatTensor(t['sub']).view(1, -1, 1, 1).cuda()
-        inp_div = torch.FloatTensor(t['div']).view(1, -1, 1, 1).cuda()
-        t = data_norm['gt']
-        gt_sub = torch.FloatTensor(t['sub']).view(1, 1, -1).cuda()
-        gt_div = torch.FloatTensor(t['div']).view(1, 1, -1).cuda()
+        
+        inp_sub = torch.FloatTensor(data_norm['inp']['sub']).view(1, -1, 1, 1).cuda()
+        inp_div = torch.FloatTensor(data_norm['inp']['div']).view(1, -1, 1, 1).cuda()
+        gt_sub  = torch.FloatTensor(data_norm['gt']['sub']).view(1, 1, -1).cuda()
+        gt_div  = torch.FloatTensor(data_norm['gt']['div']).view(1, 1, -1).cuda()
 
         if eval_type is None:
             metric_fn = utils_liif.calc_psnr
@@ -307,17 +313,20 @@ class DSModifierLIIF(DSModifier):
         else:
             raise NotImplementedError
 
-        val_res = utils_liif.Averager()
+        val_res  = utils_liif.Averager()
         val_ssim = utils_liif.Averager() #test
 
         #pbar = tqdm(loader, leave=False, desc='val')
+        image_file_lst = glob( os.path.join(data_input,'*.tif') )
         count = 0
         for enu,batch in enumerate(loader):
+            
+            image_file = image_file_lst[enu]
             
             try:
                 imgp = self._mod_img( batch, inp_sub, inp_div, eval_bsize,gt_div , gt_sub )
                 print(imgp.shape)
-                cv2.imwrite( os.path.join(dst, f"{enu}"+'+'+self.params['algo']+'.png'), imgp )
+                cv2.imwrite( os.path.join(dst, os.path.basename(image_file)), imgp )
             except Exception as e:
                 print(e)
             
@@ -387,7 +396,8 @@ class DSModifierFSRCNN(DSModifier):
         self.model, self.args = model_conf.load_ai_model_and_stuff()
         
     def _ds_input_modification(self, data_input: str, mod_path: str) -> str:
-        """Modify images
+        """
+        Modify images
         Iterates the data_input path loading images, processing with _mod_img(), and saving to mod_path
 
         Args
@@ -407,7 +417,7 @@ class DSModifierFSRCNN(DSModifier):
             try:
                 imgp = self._mod_img( image_file )
                 print( imgp.shape )
-                cv2.imwrite( os.path.join(dst, os.path.basename(image_file)+'+'+self.params['algo']+'.tif'), imgp )
+                cv2.imwrite( os.path.join(dst, os.path.basename(image_file)), imgp )
             except Exception as e:
                 print(e)
         
@@ -426,7 +436,12 @@ class DSModifierFSRCNN(DSModifier):
         image_height = (image.height // args.scale) * args.scale
 
         hr = image.resize((image_width, image_height), resample=pil_image.BICUBIC)
-        lr = hr.resize((hr.width // args.scale, hr.height // args.scale), resample=pil_image.BICUBIC)
+        
+        #lr = hr.resize((hr.width // args.scale, hr.height // args.scale), resample=pil_image.BICUBIC)
+        
+        lrsimul = LRSimulator(np.array(hr),args.scale)
+        lr = pil_image.fromarray( lrsimul.generate_low_resolution_image() )
+        
         bicubic = lr.resize((lr.width * args.scale, lr.height * args.scale), resample=pil_image.BICUBIC)
 
         lr, _ = preprocess(lr, self.device)
@@ -506,7 +521,7 @@ class DSModifierMSRN(DSModifier):
             try:
                 imgp = self._mod_img( image_file )
                 print( imgp.shape )
-                cv2.imwrite( os.path.join(dst, os.path.basename(image_file)+'+'+self.params['algo']+'.tif'), imgp )
+                cv2.imwrite( os.path.join(dst, os.path.basename(image_file)), imgp )
             except TimeOutException as ex:
                 print(ex)
             except Exception as e:
@@ -526,11 +541,13 @@ class DSModifierMSRN(DSModifier):
         gpu_device = "0"
         res_output = 1/zoom # inria resolution
         
+        lr = LRSimulator(loaded,zoom).generate_low_resolution_image()
+        
         rec_img = process_file_msrn(
-            loaded,
+            lr,
             self.model,
             compress=True,
-            res_output=res_output,
+            out_win = loaded.shape[-2],
             wind_size=wind_size+10, stride=wind_size+10,
             scale=2,
             batch_size=1,
@@ -545,8 +562,19 @@ class DSModifierMSRN(DSModifier):
     
 class SimilarityMetrics( Metric ):
     
-    def __init__( self, experiment_info: ExperimentInfo ) -> None:
-        self.metric_names = ['ssim','psnr','gmsd','mdsi','haarpsi','fid']
+    def __init__( self, experiment_info: ExperimentInfo, ext: str = 'tif' ) -> None:
+        
+        self.ext = ext
+        
+        self.metric_names = [
+            'ssim',
+            'psnr',
+            #'gmsd',
+            #'mdsi',
+            #'haarpsi',
+            'swd',
+            'fid'
+        ]
         self.experiment_info = experiment_info
         
     def apply(self, predictions: str, gt_path: str) -> Any:
@@ -557,18 +585,34 @@ class SimilarityMetrics( Metric ):
         # These are actually attributes from ds_wrapper
         self.data_path = os.path.dirname(gt_path)
         
-        # predictions be like /mlruns/1/6f1b6d86e42d402aa96665e63c44ef91/artifacts'
-        # guessed_run_id = predictions.split(os.sep)[-3]
-        # modifier_subfold = [
-        #     k
-        #     for k in self.experiment_info.runs
-        #     if self.experiment_info.runs[k]['run_id']==guessed_run_id
-        # ][0]
+        #predictions be like /mlruns/1/6f1b6d86e42d402aa96665e63c44ef91/artifacts'
+        guessed_run_id = predictions.split(os.sep)[-3]
+        modifier_subfold = [
+            k
+            for k in self.experiment_info.runs
+            if self.experiment_info.runs[k]['run_id']==guessed_run_id
+        ][0]
         
-        pred_fn_lst = glob(os.path.join( self.data_path,'test','*.tif' ))
+        pred_fn_lst = glob(os.path.join(
+            os.path.dirname(self.data_path),
+            modifier_subfold,
+            '*',f'*.{self.ext}' 
+        ))
+        
         stats = { met:0.0 for met in self.metric_names }
         
         fid = piq.FID()
+        
+        swdobj = SlicedWassersteinDistance(
+            n_pyramids=None,
+            slice_size=7,
+            n_descriptors=128,
+            n_repeat_projection=128,
+            proj_per_repeat=4,
+            device='cpu',
+            return_by_resolution=False,
+            pyramid_batchsize=128
+        )
         
         for enu,pred_fn in enumerate(pred_fn_lst):
             
@@ -591,13 +635,13 @@ class SimilarityMetrics( Metric ):
             pred = torch.transpose( pred, 3, 1 )
             gt   = torch.transpose( gt  , 3, 1 )
             
-            stats['ssim'] += piq.ssim(pred,gt).item()
-            stats['psnr'] += piq.psnr(pred,gt).item()
-            stats['gmsd'] += piq.gmsd(pred,gt).item()
-            stats['mdsi'] += piq.mdsi(pred,gt).item()
-            stats['haarpsi']+= piq.haarpsi(pred,gt).item()
-            
-            stats['fid'] += np.sum( [
+            stats['ssim']     += piq.ssim(pred,gt).item()
+            stats['psnr']     += piq.psnr(pred,gt).item()
+            #stats['gmsd']    += piq.gmsd(pred,gt).item()
+            #stats['mdsi']    += piq.mdsi(pred,gt).item()
+            #stats['haarpsi'] += piq.haarpsi(pred,gt).item()
+            stats['swd']      += swdobj.run(pred.double(),gt.double()).item()
+            stats['fid']      += np.sum( [
                 fid( torch.squeeze(pred)[i,...], torch.squeeze(gt)[i,...] ).item()
                 for i in range( pred.shape[1] )
             ] ) / pred.shape[1]
