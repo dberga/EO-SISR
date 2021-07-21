@@ -1,48 +1,10 @@
-import os
-import tempfile
-import sys
-import json
-import cv2
 import torch
-import yaml
-# import kornia
-import signal
-import time
-import math
 
 import numpy as np
-import PIL.Image as pil_image
-
-from glob import glob
-from torch.utils.data import DataLoader
-from typing import Any, Dict, Optional, List,Union,Tuple
-from iq_tool_box.datasets import DSModifier
-from iq_tool_box.metrics import Metric
-from iq_tool_box.experiments import ExperimentInfo
-
-from joblib import Parallel, delayed
 
 import torch.nn.functional as F
-import torch.backends.cudnn as cudnn
 
-# MSRN
-from msrn.msrn import load_msrn_model, process_file_msrn
-
-# FSRCNN
-from utils.utils_fsrcnn import convert_ycbcr_to_rgb, preprocess
-from models.model_fsrcnn import FSRCNN
-
-# LIIF
-from datasets.liif import datasets
-from utils import utils_liif
-from models.liif import models as models_liif
-# from models import models_liif
-# from models_liif import modelsliif
-# from config.config_srcnn import Config_srcnn
-# from testing.test_fsrcnn import test_fsrcnn
-
-# Metrics
-from swd import SlicedWassersteinDistance
+from typing import List, Optional, Tuple, Union
 
 class LRSimulator(object):
     
@@ -397,9 +359,12 @@ class LRSimulator(object):
 
 if __name__ == "__main__":
     
-    import kornia
+    
     
     def generate_low_resolution_image(img_array, scale=2):
+        
+        import kornia
+        
         img = kornia.image_to_tensor(img_array.copy()).float()[None]
 
         sigma = 0.5*scale
@@ -414,26 +379,6 @@ if __name__ == "__main__":
         blurred_resize = blurred_resize.numpy()[0].transpose(1,2,0).astype(np.uint8)
         return blurred_resize
     
-    def generate_HR_LW_pair(img_array, crop_size=(256,256), scale=2, mode='training'):
-        img = kornia.image_to_tensor(img_array.copy()).float()
-
-        random_crop = kornia.augmentation.RandomCrop(crop_size,)
-        random_center_crop = kornia.augmentation.CenterCrop(crop_size,)
-
-        sigma = 0.5*scale
-        kernel_size = int(sigma*3 + 4)
-
-        if mode=='training':
-            img_crop = random_crop(img)
-        else:
-            img_crop = random_center_crop(img)
-
-        kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size,kernel_size), (sigma, sigma))
-        blurred = kornia.filter2D(img_crop, kernel_tensor[None])
-        blurred_resize = kornia.geometry.rescale(blurred, 1/scale, 'bilinear')
-        return img_crop[0], blurred_resize[0]
-
-    
     scale = 2
     
     hr = np.random.rand(256,256,3)*255
@@ -447,3 +392,5 @@ if __name__ == "__main__":
     lr = lrs.generate_low_resolution_image()
     
     print( 'hr', hr.shape , 'lr' , lr.shape , 'lr1' , lr1.shape )
+    
+    assert lr.shape == lr1.shape , 'output shape is not the expected'
