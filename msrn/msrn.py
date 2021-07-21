@@ -218,10 +218,10 @@ def inference_model(model, nimg, wind_size=512, stride=480, scale=2,
     output = np.zeros((dataset.H_out, dataset.W_out, C)).astype(np.float)
     counts = np.zeros((dataset.H_out, dataset.W_out, C)).astype(np.float)
 
-    psteps = tqdm(total=len(dataloader), desc='\tSI-AI inference', position=0)
+#     psteps = tqdm(total=len(dataloader), desc='\tSI-AI inference', position=0)
 
-    if manager is not None:
-        psteps = manager.counter(total=len(dataloader), desc='\tSI-AI inference', unit='steps')
+#     if manager is not None:
+#         psteps = manager.counter(total=len(dataloader), desc='\tSI-AI inference', unit='steps')
 
     for sample in dataloader:
 
@@ -263,7 +263,7 @@ def inference_model(model, nimg, wind_size=512, stride=480, scale=2,
 
             output[Y0:Y1, X0:X1]+=pred_sample[...]
             counts[Y0:Y1, X0:X1,:]+=1
-            psteps.update()
+#             psteps.update()
             
     res = np.divide(output, counts)
     return res
@@ -302,7 +302,7 @@ def load_msrn_model(weights_path=None, cuda='0'):
     return model
 
 def process_file_msrn(
-    nimg, model, compress=True, res_output=0.7,
+    nimg, model, compress=True, out_win=256,
     wind_size=512, stride=480, batch_size=1,
     scale=2, padding=5, manager=None
 ):
@@ -334,10 +334,10 @@ def process_file_msrn(
     result = cv2.convertScaleAbs(result, alpha=np.iinfo(np.uint8).max)
     result = result.astype(np.uint8)
     
-    sfactor = int(10* (1/(scale*res_output))) / 10 # round up to 2nd decimal
-    H,W = result.shape[:2]
-    H_t, W_t = int(H*sfactor), int(W*sfactor)
-    result = cv2.resize(result, (W_t, H_t), cv2.INTER_AREA)
+    #sfactor = int(10* (1/(scale*res_output))) / 10 # round up to 2nd decimal
+    #H,W = result.shape[:2]
+    #H_t, W_t = int(H*sfactor), int(W*sfactor)
+    result = cv2.resize(result, (out_win,out_win), cv2.INTER_AREA)
 
     return result
 
