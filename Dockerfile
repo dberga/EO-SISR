@@ -43,4 +43,8 @@ RUN pip3 install torch==1.7.0+cu110 torchvision==0.8.1+cu110 -f https://download
 RUN pip3 install rasterio==1.2.6
 RUN pip3 install kornia --no-deps
 
+ENV LC_ALL=C.UTF-8
+ENV LANG=C.UTF-8
+
 CMD ["/bin/bash"]
+
