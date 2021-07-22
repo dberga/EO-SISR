@@ -33,7 +33,7 @@ WORKDIR /sisr
 ENV LD_LIBRARY_PATH=/usr/local/nvidia/lib64:$LD_LIBRARY_PATH
 ENV  PATH=/usr/local/nvidia/bin:$PATH
 
-RUN pip3 install git+https://gitlab+deploy-token-28:xkxRsx2anp-u3_V4aAK9@publicgitlab.satellogic.com/iqf/iq_tool_box-
+RUN pip3 install git+https://gitlab+deploy-token-28:xkxRsx2anp-u3_V4aAK9@publicgitlab.satellogic.com/iqf/iq_tool_box-@eurecat-sr
 
 COPY requirements.txt ./
 RUN pip3 install --no-cache-dir -r requirements.txt

@@ -1,0 +1,8 @@
+joblib
+jupyterlab
+notebook
+piq==0.5.5
+boto3
+tensorboardX
+tqdm
+imageio
