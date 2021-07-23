@@ -37,4 +37,4 @@ mlflow:
 	docker run --privileged -itd --rm -p ${MLF_PORT}:${MLF_PORT} \
 	-v $(shell pwd):/sisr -v $(DS_VOLUME):/scratch \
 	sisr \
-	python3.6 mlflow ui --host 0.0.0.0
+	mlflow ui --host 0.0.0.0:${MLF_PORT}
