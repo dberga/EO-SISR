@@ -562,7 +562,19 @@ class DSModifierMSRN(DSModifier):
     
 class SimilarityMetrics( Metric ):
     
-    def __init__( self, experiment_info: ExperimentInfo, ext: str = 'tif' ) -> None:
+    def __init__(
+        self,
+        experiment_info: ExperimentInfo,
+        ext: str = 'tif',
+        n_pyramids:Union[int, None]=None,
+        slice_size:int=7,
+        n_descriptors:int=128,
+        n_repeat_projection:int=128,
+        proj_per_repeat:int=4,
+        device:str='cpu',
+        return_by_resolution:bool=False,
+        pyramid_batchsize:int=128
+    ) -> None:
         
         self.ext = ext
         
@@ -576,6 +588,15 @@ class SimilarityMetrics( Metric ):
             'fid'
         ]
         self.experiment_info = experiment_info
+        
+        self.n_pyramids           = n_pyramids
+        self.slice_size           = slice_size
+        self.n_descriptors        = n_descriptors
+        self.n_repeat_projection  = n_repeat_projection
+        self.proj_per_repeat      = proj_per_repeat
+        self.device               = device
+        self.return_by_resolution = return_by_resolution
+        self.pyramid_batchsize    = pyramid_batchsize
         
     def apply(self, predictions: str, gt_path: str) -> Any:
         """
@@ -604,14 +625,14 @@ class SimilarityMetrics( Metric ):
         fid = piq.FID()
         
         swdobj = SlicedWassersteinDistance(
-            n_pyramids=None,
-            slice_size=7,
-            n_descriptors=128,
-            n_repeat_projection=128,
-            proj_per_repeat=4,
-            device='cpu',
-            return_by_resolution=False,
-            pyramid_batchsize=128
+            n_pyramids           = self.n_pyramids,
+            slice_size           = self.slice_size,
+            n_descriptors        = self.n_descriptors,
+            n_repeat_projection  = self.n_repeat_projection,
+            proj_per_repeat      = self.proj_per_repeat,
+            device               = self.device,
+            return_by_resolution = self.return_by_resolution,
+            pyramid_batchsize    = self.pyramid_batchsize
         )
         
         for enu,pred_fn in enumerate(pred_fn_lst):
@@ -626,6 +647,9 @@ class SimilarityMetrics( Metric ):
             pred = cv2.imread( pred_fn )/255
             gt = cv2.imread( gt_fn )/255
             
+            if 'LIIF' in pred_fn or 'FSRCNN' in pred_fn:
+                pred = pred[...,::-1].copy()
+            
             pred = torch.from_numpy( pred )
             gt = torch.from_numpy( gt )
             
@@ -634,6 +658,10 @@ class SimilarityMetrics( Metric ):
             
             pred = torch.transpose( pred, 3, 1 )
             gt   = torch.transpose( gt  , 3, 1 )
+            
+            if pred.size()!=gt.size():
+                print('different size found', pred.size(), gt.size())
+                continue
             
             stats['ssim']     += piq.ssim(pred,gt).item()
             stats['psnr']     += piq.psnr(pred,gt).item()
