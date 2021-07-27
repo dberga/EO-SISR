@@ -15,7 +15,7 @@ help:
 
 build:
 	docker build -t sisr .
-	#./download.sh
+	./download.sh
 
 dockershell:
 	docker run --rm --name sisr --gpus all -p 9198:9198 \
