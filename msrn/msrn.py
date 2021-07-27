@@ -292,7 +292,8 @@ def load_msrn_model(weights_path=None, cuda='0'):
     else:
         weights = torch.load(weights_path)
 
-    model.load_state_dict(weights)
+    #model.load_state_dict(weights)
+    model.load_state_dict(weights['model'].state_dict())
     model.eval()
     
     if cuda is not None:
