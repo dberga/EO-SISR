@@ -62,6 +62,17 @@ class LRSimulator(object):
         gauss = torch.exp((-x.pow(2.0) / (2 * sigma ** 2)))
         return gauss / gauss.sum()
     
+    def _side_to_image_size(self,side_size: int, aspect_ratio: float, side: str = "short") -> Tuple[int, int]:
+        if side not in ("short", "long", "vert", "horz"):
+            raise ValueError(f"side can be one of 'short', 'long', 'vert', and 'horz'. Got '{side}'")
+        if side == "vert":
+            return side_size, int(side_size * aspect_ratio)
+        if side == "horz":
+            return int(side_size / aspect_ratio), side_size
+        if (side == "short") ^ (aspect_ratio < 1.0):
+            return side_size, int(side_size * aspect_ratio)
+        return int(side_size / aspect_ratio), side_size
+    
     def _resize(
         self,
         in_tensor: torch.Tensor,
@@ -104,7 +115,7 @@ class LRSimulator(object):
         input_size = h, w = in_tensor.shape[-2:]
         if isinstance(size, int):
             aspect_ratio = w / h
-            size = _side_to_image_size(size, aspect_ratio, side)
+            size = self._side_to_image_size(size, aspect_ratio, side)
 
         if size == input_size:
             return in_tensor

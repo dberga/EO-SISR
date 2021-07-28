@@ -338,6 +338,27 @@ class DSModifierLIIF(DSModifier):
             batch[k] = v.cuda()
 
         inp = (batch['inp'] - inp_sub) / inp_div
+        
+        
+        
+        
+        
+#         inp = torch.flip(inp, [1])
+        
+#         import matplotlib.pyplot as plt
+#         aux = inp.squeeze().cpu().detach().numpy()
+#         print('WWW',aux.shape)
+#         plt.imshow( np.transpose(aux,[1,2,0]) )
+#         plt.show()
+#         import pdb; pdb.set_trace()
+        
+        
+        
+        
+        
+        
+        
+        
         if eval_bsize is None:
             with torch.no_grad():
                 pred = self.model(inp, batch['coord'], batch['cell'])
@@ -660,8 +681,17 @@ class SimilarityMetrics( Metric ):
             gt   = torch.transpose( gt  , 3, 1 )
             
             if pred.size()!=gt.size():
-                print('different size found', pred.size(), gt.size())
-                continue
+                
+                #print('different size found', pred.size(), gt.size())
+                
+                pred = torch.clamp( LRSimulator(None,3)._resize(
+                        pred,
+                        gt.size()[-1],
+                        interpolation = 'bicubic',
+                        align_corners = None,
+                        side = "short",
+                        antialias = False,
+                    ), min=0.0, max=1.0 )
             
             stats['ssim']     += piq.ssim(pred,gt).item()
             stats['psnr']     += piq.psnr(pred,gt).item()
