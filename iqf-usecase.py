@@ -18,12 +18,12 @@ from iq_tool_box.metrics import RERMetric, SNRMetric
 from custom_iqf import DSModifierMSRN, DSModifierFSRCNN,  DSModifierLIIF
 from custom_iqf import SimilarityMetrics
 
-mic = '-micro'
-shutil.rmtree(f"./Data/test{mic}-ds/.ipynb_checkpoints",ignore_errors=True)
-for el in os.listdir("./Data"):
-    if el!="test" and "#" in el:
-        shutil.rmtree(os.path.join("./Data",el),ignore_errors=True)
-shutil.rmtree("./mlruns",ignore_errors=True)
+mic = ''
+# shutil.rmtree(f"./Data/test{mic}-ds/.ipynb_checkpoints",ignore_errors=True)
+# for el in os.listdir("./Data"):
+#     if el!="test" and "#" in el:
+#         shutil.rmtree(os.path.join("./Data",el),ignore_errors=True)
+# shutil.rmtree("./mlruns",ignore_errors=True)
 
 
 #Define name of IQF experiment
@@ -83,7 +83,7 @@ win = 128
 _ = experiment_info.apply_metric_per_run(
     SimilarityMetrics(
         experiment_info,
-        n_jobs               = 1,
+        n_jobs               = 15,
         ext                  = 'tif',
         n_pyramids           = 2,
         slice_size           = 7,
@@ -105,7 +105,7 @@ _ = experiment_info.apply_metric_per_run(
         win=16,
         stride=16,
         ext="tif",
-        n_jobs=1
+        n_jobs=15
     ),
     ds_wrapper.json_annotations,
 )
@@ -115,7 +115,7 @@ print('Calculating SNR Metric...')
 _ = experiment_info.apply_metric_per_run(
     SNRMetric(
         experiment_info,
-        n_jobs=1,
+        n_jobs=15,
         ext="tif",
         patch_sizes=[30],
         confidence_limit=50.0
