@@ -1,3 +1,6 @@
+PROJ_NAME=sisr
+CONTAINER_NAME="${PROJ_NAME}-${USER}"
+
 ifndef DS_VOLUME
 	DS_VOLUME=/scratch
 endif
@@ -18,12 +21,13 @@ build:
 	./download.sh
 
 dockershell:
-	docker run --rm --name sisr --gpus all -p 9198:9198 \
+	docker run --rm --name $(CONTAINER_NAME) --gpus all -p 9198:9198 \
 	-v $(shell pwd):/sisr -v $(DS_VOLUME):/scratch \
 	-it sisr
 
 notebookshell:
-	docker run --gpus all --privileged -itd --rm -p ${NB_PORT}:${NB_PORT} \
+	docker run --gpus all --privileged -itd --rm --name $(CONTAINER_NAME) \
+	-p ${NB_PORT}:${NB_PORT} \
 	-v $(shell pwd):/sisr -v $(DS_VOLUME):/scratch \
 	sisr \
 	jupyter notebook \
@@ -34,7 +38,8 @@ notebookshell:
 	--port=${NB_PORT}
 
 mlflow:
-	docker run --privileged -itd --rm -p ${MLF_PORT}:${MLF_PORT} \
+	docker run --privileged -itd --rm --name $(CONTAINER_NAME) \
+	-p ${MLF_PORT}:${MLF_PORT} \
 	-v $(shell pwd):/sisr -v $(DS_VOLUME):/scratch \
 	sisr \
 	mlflow ui --host 0.0.0.0:${MLF_PORT}

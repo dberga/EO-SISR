@@ -1,8 +1,11 @@
 FROM nvidia/cuda:11.0.3-cudnn8-runtime-ubuntu20.04
-#FROM nvidia/cuda:10.0-cudnn7-runtime-ubuntu18.04
 
 # This prevents interactive region dialoge
 ENV DEBIAN_FRONTEND=noninteractive
+ENV LD_LIBRARY_PATH=/usr/local/nvidia/lib64:$LD_LIBRARY_PATH
+ENV PATH=/usr/local/nvidia/bin:$PATH
+ENV LC_ALL=C.UTF-8
+ENV LANG=C.UTF-8
 
 RUN apt-get update && apt-get install -y --no-install-recommends software-properties-common \
     libsm6 libxext6 libxrender-dev curl \
@@ -30,9 +33,6 @@ RUN pip3 install pip --upgrade
 
 WORKDIR /sisr
 
-ENV LD_LIBRARY_PATH=/usr/local/nvidia/lib64:$LD_LIBRARY_PATH
-ENV  PATH=/usr/local/nvidia/bin:$PATH
-
 RUN pip3 install git+https://gitlab+deploy-token-28:xkxRsx2anp-u3_V4aAK9@publicgitlab.satellogic.com/iqf/iq_tool_box-
 
 COPY requirements.txt ./
@@ -42,9 +42,6 @@ RUN pip3 install torch==1.7.0+cu110 torchvision==0.8.1+cu110 -f https://download
 
 RUN pip3 install rasterio==1.2.6
 RUN pip3 install kornia --no-deps
-
-ENV LC_ALL=C.UTF-8
-ENV LANG=C.UTF-8
 
 CMD ["/bin/bash"]
 

@@ -586,6 +586,7 @@ class SimilarityMetrics( Metric ):
     def __init__(
         self,
         experiment_info: ExperimentInfo,
+        n_jobs: int = 1,
         ext: str = 'tif',
         n_pyramids:Union[int, None]=None,
         slice_size:int=7,
@@ -597,6 +598,7 @@ class SimilarityMetrics( Metric ):
         pyramid_batchsize:int=128
     ) -> None:
         
+        self.n_jobs = n_jobs
         self.ext = ext
         
         self.metric_names = [
@@ -618,7 +620,65 @@ class SimilarityMetrics( Metric ):
         self.device               = device
         self.return_by_resolution = return_by_resolution
         self.pyramid_batchsize    = pyramid_batchsize
+    
+    def _parallel(self, fid:object,swdobj:object, pred_fn:str) -> List[Dict[str,Any]]:
+
+        # pred_fn be like: xview_id1529imgset0012+hrn.png
+        img_name = os.path.basename(pred_fn)
+        gt_fn = os.path.join(self.data_path,"test",f"{img_name}")
         
+        pred = cv2.imread( pred_fn )/255
+        gt = cv2.imread( gt_fn )/255
+        
+        if 'LIIF' in pred_fn or 'FSRCNN' in pred_fn:
+            pred = pred[...,::-1].copy()
+        
+        pred = torch.from_numpy( pred )
+        gt = torch.from_numpy( gt )
+        
+        pred = pred.view(1,-1,pred.shape[-2],pred.shape[-1])
+        gt = gt.view(1,-1,gt.shape[-2],gt.shape[-1])
+        
+        pred = torch.transpose( pred, 3, 1 )
+        gt   = torch.transpose( gt  , 3, 1 )
+        
+        results_dict = {
+            "ssim":None,
+            "psnr":None,
+            "swd":None,
+            "fid":None
+        }
+
+        if pred.size()!=gt.size():
+            
+            #print('different size found', pred.size(), gt.size())
+            
+            pred = torch.clamp( LRSimulator(None,3)._resize(
+                    pred,
+                    gt.shape[-2],
+                    interpolation = 'bicubic',
+                    align_corners = None,
+                    side = "short",
+                    antialias = False,
+                ), min=0.0, max=1.0 )
+            
+            if pred.size()!=gt.size():
+                #print('different size found', pred.size(), gt.size())
+                return results_dict
+
+
+        results_dict = {
+            "ssim":piq.ssim(pred,gt).item(),
+            "psnr":piq.psnr(pred,gt).item(),
+            "swd":swdobj.run(pred.double(),gt.double()).item(),
+            "fid":np.sum( [
+                fid( torch.squeeze(pred)[i,...], torch.squeeze(gt)[i,...] ).item()
+                for i in range( pred.shape[1] )
+                ] ) / pred.shape[1]
+        }
+
+        return results_dict
+
     def apply(self, predictions: str, gt_path: str) -> Any:
         """
         In this case gt_path will be a glob criteria to the HR images
@@ -656,57 +716,18 @@ class SimilarityMetrics( Metric ):
             pyramid_batchsize    = self.pyramid_batchsize
         )
         
-        for enu,pred_fn in enumerate(pred_fn_lst):
-            
-            if enu%100==0:
-                print(f'Estimating similarity metrics {enu//100}/{len(pred_fn_lst)//100}...')
-            
-            # pred_fn be like: xview_id1529imgset0012+hrn.png
-            img_name = os.path.basename(pred_fn)
-            gt_fn = os.path.join(self.data_path,"test",f"{img_name}")
-            
-            pred = cv2.imread( pred_fn )/255
-            gt = cv2.imread( gt_fn )/255
-            
-            if 'LIIF' in pred_fn or 'FSRCNN' in pred_fn:
-                pred = pred[...,::-1].copy()
-            
-            pred = torch.from_numpy( pred )
-            gt = torch.from_numpy( gt )
-            
-            pred = pred.view(1,-1,pred.shape[-2],pred.shape[-1])
-            gt = gt.view(1,-1,gt.shape[-2],gt.shape[-1])
-            
-            pred = torch.transpose( pred, 3, 1 )
-            gt   = torch.transpose( gt  , 3, 1 )
-            
-            if pred.size()!=gt.size():
-                
-                #print('different size found', pred.size(), gt.size())
-                
-                pred = torch.clamp( LRSimulator(None,3)._resize(
-                        pred,
-                        gt.size()[-1],
-                        interpolation = 'bicubic',
-                        align_corners = None,
-                        side = "short",
-                        antialias = False,
-                    ), min=0.0, max=1.0 )
-            
-            stats['ssim']     += piq.ssim(pred,gt).item()
-            stats['psnr']     += piq.psnr(pred,gt).item()
-            #stats['gmsd']    += piq.gmsd(pred,gt).item()
-            #stats['mdsi']    += piq.mdsi(pred,gt).item()
-            #stats['haarpsi'] += piq.haarpsi(pred,gt).item()
-            stats['swd']      += swdobj.run(pred.double(),gt.double()).item()
-            stats['fid']      += np.sum( [
-                fid( torch.squeeze(pred)[i,...], torch.squeeze(gt)[i,...] ).item()
-                for i in range( pred.shape[1] )
-            ] ) / pred.shape[1]
-            
-        for k in stats:
-            # If there are results for the given modifier...
-            if len(pred_fn_lst)!=0:
-                stats[k] = stats[k]/len(pred_fn_lst)
+        results_dict_lst = Parallel(n_jobs=self.n_jobs,verbose=30)(
+            delayed(self._parallel)(fid,swdobj,pred_fn)
+            for pred_fn in pred_fn_lst
+            )
+        
+        stats = {
+            met:np.median([
+                r[met]
+                for r in results_dict_lst
+                if 'float' in type(r[met]).__name__
+                ])
+            for met in self.metric_names
+        }
                 
         return stats
