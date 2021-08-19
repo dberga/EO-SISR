@@ -25,6 +25,8 @@ from joblib import Parallel, delayed
 import torch.backends.cudnn as cudnn
 
 from lowresgen import LRSimulator
+from torchvision import transforms
+import kornia
 
 # MSRN
 from msrn.msrn import load_msrn_model, process_file_msrn
@@ -37,10 +39,6 @@ from models.model_fsrcnn import FSRCNN
 from datasets.liif import datasets as datasets_liif
 from utils import utils_liif
 from models.liif import models as models_liif
-# from models import models_liif
-# from models_liif import modelsliif
-# from config.config_srcnn import Config_srcnn
-# from testing.test_fsrcnn import test_fsrcnn
 
 # Metrics
 from swd import SlicedWassersteinDistance
@@ -63,7 +61,8 @@ class ModelConfS3Loader():
         model_fn      = "single_frame_sr/SISR_MSRN_X2_BICUBIC.pth",
         config_fn_lst = [],
         bucket_name   = "image-quality-framework",
-        algo          = "FSRCNN"
+        algo          = "FSRCNN",
+        msrn_scale    = 3
     ):
         
         self.fn_dict = {
@@ -76,6 +75,7 @@ class ModelConfS3Loader():
         self.config_fn_lst      =  config_fn_lst
         self.bucket_name        =  bucket_name
         self.algo               =  algo
+        self.msrn_scale         =  3
         
     def load_ai_model_and_stuff(self) -> List[Any]:
         
@@ -139,7 +139,8 @@ class ModelConfS3Loader():
                 
                 args = None
                 model = self._load_model_msrn(
-                    os.path.join(tmpdirname ,"model")
+                    os.path.join(tmpdirname ,"model"),
+                    n_scale=self.msrn_scale
                 )
                 
             else:
@@ -166,7 +167,7 @@ class ModelConfS3Loader():
 
         cudnn.benchmark = True
         device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-        
+
         model = FSRCNN(scale_factor=args.scale).to(device)
 
         state_dict = model.state_dict()
@@ -200,9 +201,9 @@ class ModelConfS3Loader():
         
         return model
     
-    def _load_model_msrn(self,model_fn: str) -> Any:
+    def _load_model_msrn(self,model_fn: str,n_scale:int = 3) -> Any:
         """Load MSRN Model"""
-        return load_msrn_model(model_fn)
+        return load_msrn_model(model_fn,n_scale=n_scale)
 
 #########################
 # Custom IQF
@@ -287,8 +288,8 @@ class DSModifierLIIF(DSModifier):
         
         dataset = datasets_liif.make(spec['dataset'])
         dataset = datasets_liif.make(spec['wrapper'], args={'dataset': dataset})
-        loader = DataLoader(dataset, batch_size=spec['batch_size'],
-                           num_workers=8, pin_memory=True)
+        loader = DataLoader(dataset, batch_size=spec['batch_size'],shuffle=False,
+                           num_workers=1, pin_memory=True)
         
         if data_norm is None:
         
@@ -317,7 +318,7 @@ class DSModifierLIIF(DSModifier):
         val_ssim = utils_liif.Averager() #test
 
         #pbar = tqdm(loader, leave=False, desc='val')
-        image_file_lst = glob( os.path.join(data_input,'*.tif') )
+        image_file_lst = sorted( glob( os.path.join(data_input,'*.tif') ) )
         count = 0
         for enu,batch in enumerate(loader):
             
@@ -326,7 +327,9 @@ class DSModifierLIIF(DSModifier):
             try:
                 imgp = self._mod_img( batch, inp_sub, inp_div, eval_bsize,gt_div , gt_sub )
                 print(imgp.shape)
-                cv2.imwrite( os.path.join(dst, os.path.basename(image_file)), imgp )
+                output = pil_image.fromarray((imgp*255).astype(np.uint8))
+                output.save( os.path.join(dst, os.path.basename(image_file)) )
+                #cv2.imwrite( os.path.join(dst, os.path.basename(image_file)), imgp )
             except Exception as e:
                 print(e)
             
@@ -338,26 +341,6 @@ class DSModifierLIIF(DSModifier):
             batch[k] = v.cuda()
 
         inp = (batch['inp'] - inp_sub) / inp_div
-        
-        
-        
-        
-        
-#         inp = torch.flip(inp, [1])
-        
-#         import matplotlib.pyplot as plt
-#         aux = inp.squeeze().cpu().detach().numpy()
-#         print('WWW',aux.shape)
-#         plt.imshow( np.transpose(aux,[1,2,0]) )
-#         plt.show()
-#         import pdb; pdb.set_trace()
-        
-        
-        
-        
-        
-        
-        
         
         if eval_bsize is None:
             with torch.no_grad():
@@ -438,7 +421,9 @@ class DSModifierFSRCNN(DSModifier):
             try:
                 imgp = self._mod_img( image_file )
                 print( imgp.shape )
-                cv2.imwrite( os.path.join(dst, os.path.basename(image_file)), imgp )
+                output = pil_image.fromarray(imgp)
+                output.save(os.path.join(dst, os.path.basename(image_file)))
+                #cv2.imwrite( os.path.join(dst, os.path.basename(image_file)), imgp )
             except Exception as e:
                 print(e)
         
@@ -450,18 +435,23 @@ class DSModifierFSRCNN(DSModifier):
         
         args = self.args
         model = self.model
-        
+
         image = pil_image.open(image_file).convert('RGB')
 
         image_width = (image.width // args.scale) * args.scale
         image_height = (image.height // args.scale) * args.scale
 
+        # AFEGIT PER FER EL BLUR
+        img_tensor = transforms.ToTensor()(image).unsqueeze_(0)
+        sigma = 0.5 * args.scale
+        kernel_size = math.ceil(sigma * 3 + 4)
+        kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
+        image_blur = kornia.filter2d(img_tensor, kernel_tensor[None])
+        image = transforms.ToPILImage()(image_blur.squeeze_(0))
+        ########
+
         hr = image.resize((image_width, image_height), resample=pil_image.BICUBIC)
-        
-        #lr = hr.resize((hr.width // args.scale, hr.height // args.scale), resample=pil_image.BICUBIC)
-        
-        lrsimul = LRSimulator(np.array(hr),args.scale)
-        lr = pil_image.fromarray( lrsimul.generate_low_resolution_image() )
+        lr = hr.resize((hr.width // args.scale, hr.height // args.scale), resample=pil_image.BICUBIC)
         
         bicubic = lr.resize((lr.width * args.scale, lr.height * args.scale), resample=pil_image.BICUBIC)
 
@@ -475,7 +465,7 @@ class DSModifierFSRCNN(DSModifier):
 
         output = np.array([preds, ycbcr[..., 1], ycbcr[..., 2]]).transpose([1, 2, 0])
         output = np.clip(convert_ycbcr_to_rgb(output), 0.0, 255.0).astype(np.uint8)
-        
+
         return output
 
 class DSModifierMSRN(DSModifier):
@@ -513,7 +503,8 @@ class DSModifierMSRN(DSModifier):
                 model_fn      = params['model'],
                 config_fn_lst = [],
                 bucket_name   = "image-quality-framework",
-                algo          = "MSRN"
+                algo          = "MSRN",
+                msrn_scale    = self.params['zoom']
         )
         
         self.model,_ = model_conf.load_ai_model_and_stuff()
@@ -561,19 +552,86 @@ class DSModifierMSRN(DSModifier):
         wind_size  = loaded.shape[1]
         gpu_device = "0"
         res_output = 1/zoom # inria resolution
-        
-        lr = LRSimulator(loaded,zoom).generate_low_resolution_image()
-        
+
         rec_img = process_file_msrn(
-            lr,
+            loaded,
             self.model,
             compress=True,
             out_win = loaded.shape[-2],
             wind_size=wind_size+10, stride=wind_size+10,
-            scale=2,
+            scale=3,
             batch_size=1,
             padding=5
         )
+        
+        return rec_img
+
+#########################
+# Fake Modifier
+#########################
+
+class DSModifierFake(DSModifier):
+    """
+    Class derived from DSModifier that modifies a dataset iterating its folder.
+    This modifier copies images from a folder already preexecuted (premodified).
+
+    Args:
+        ds_modifer: DSModifier. Composed modifier child
+
+    Attributes:
+        name: str. Name of the modifier
+        images_dir: str. Directory of images to copy from.
+        src_ext : str = 'tif'. Extension of reference GT images
+        dst_ext : str = 'tif'. Extension of images to copy from.
+        ds_modifer: DSModifier. Composed modifier child
+        params: dict. Contains metainfomation of the modifier
+        
+    """
+    def __init__(
+        self,
+        name: str,
+        images_dir: str,
+        src_ext : str = 'tif',
+        dst_ext : str = 'tif',
+        ds_modifier: Optional[DSModifier] = None,
+        params: Dict[str, Any] = {
+            "zoom": 3
+        }
+    ):
+        self.src_ext                = src_ext
+        self.dst_ext                = dst_ext
+        self.images_dir             = images_dir
+        self.name                   = name
+        self.params: Dict[str, Any] = params
+        self.ds_modifier            = ds_modifier
+        self.params.update({"modifier": "{}".format(self.name)})
+        
+    def _ds_input_modification(self, data_input: str, mod_path: str) -> str:
+        
+        input_name = os.path.basename(data_input)
+        dst = os.path.join(mod_path, input_name)
+        
+        os.makedirs(dst, exist_ok=True)
+        
+        print(f'For each image file in <{data_input}>...')
+        
+        for image_file in glob( os.path.join(data_input,'*.'+self.src_ext) ):
+            
+            imgp = self._mod_img( image_file )
+            cv2.imwrite( os.path.join(dst, os.path.basename(image_file)), imgp )
+        
+        print('Done.')
+        
+        return input_name
+
+    def _mod_img(self, image_file: str) -> np.array:
+
+        fn = [
+            fn for fn in glob(os.path.join(self.images_dir,'*.'+self.dst_ext))
+            if os.path.basename(image_file).split('.')[0]==os.path.basename(fn).split('.')[0]
+        ][0]
+        
+        rec_img = cv2.imread(fn)
         
         return rec_img
 
@@ -586,6 +644,7 @@ class SimilarityMetrics( Metric ):
     def __init__(
         self,
         experiment_info: ExperimentInfo,
+        img_dir_gt: str = "test",
         n_jobs: int = 1,
         ext: str = 'tif',
         n_pyramids:Union[int, None]=None,
@@ -598,8 +657,9 @@ class SimilarityMetrics( Metric ):
         pyramid_batchsize:int=128
     ) -> None:
         
-        self.n_jobs = n_jobs
-        self.ext = ext
+        self.img_dir_gt = img_dir_gt
+        self.n_jobs     = n_jobs
+        self.ext        = ext
         
         self.metric_names = [
             'ssim',
@@ -625,22 +685,36 @@ class SimilarityMetrics( Metric ):
 
         # pred_fn be like: xview_id1529imgset0012+hrn.png
         img_name = os.path.basename(pred_fn)
-        gt_fn = os.path.join(self.data_path,"test",f"{img_name}")
+        gt_fn = os.path.join(self.data_path,self.img_dir_gt,f"{img_name}")
         
-        pred = cv2.imread( pred_fn )/255
-        gt = cv2.imread( gt_fn )/255
-        
-        if 'LIIF' in pred_fn or 'FSRCNN' in pred_fn:
-            pred = pred[...,::-1].copy()
-        
-        pred = torch.from_numpy( pred )
-        gt = torch.from_numpy( gt )
-        
-        pred = pred.view(1,-1,pred.shape[-2],pred.shape[-1])
-        gt = gt.view(1,-1,gt.shape[-2],gt.shape[-1])
-        
-        pred = torch.transpose( pred, 3, 1 )
-        gt   = torch.transpose( gt  , 3, 1 )
+        if True:#'FSRCNN' in pred_fn or 'LIIF' in pred_fn:
+
+            pred = transforms.ToTensor()(pil_image.open(pred_fn).convert('RGB')).unsqueeze_(0)
+            image = pil_image.open(gt_fn).convert('RGB')
+            img_tensor = transforms.ToTensor()(image).unsqueeze_(0)
+            scale = 3
+            sigma = 0.5*scale
+            #( int(sigma*3+4)+1 if (int(sigma*3+4))%2==0 else int(sigma*3+4) )
+            kernel_size = 9
+            kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
+            gt = torch.clamp( kornia.filter2d(img_tensor, kernel_tensor[None]), min=0.0, max=1.0 )
+
+        else:
+            
+            pred = cv2.imread( pred_fn )/255
+            gt = cv2.imread( gt_fn )/255
+
+            if 'LIIF' in pred_fn or 'FSRCNN' in pred_fn:
+                pred = pred[...,::-1].copy()
+            
+            pred = torch.from_numpy( pred )
+            gt = torch.from_numpy( gt )
+
+            pred = pred.view(1,-1,pred.shape[-2],pred.shape[-1])
+            gt = gt.view(1,-1,gt.shape[-2],gt.shape[-1])
+            
+            pred = torch.transpose( pred, 3, 1 )
+            gt   = torch.transpose( gt  , 3, 1 )
         
         results_dict = {
             "ssim":None,
@@ -667,10 +741,15 @@ class SimilarityMetrics( Metric ):
                 return results_dict
 
 
+        try:
+            swd_res = swdobj.run(pred.double(),gt.double()).item()
+        except:
+            swd_res = None
+        
         results_dict = {
             "ssim":piq.ssim(pred,gt).item(),
             "psnr":piq.psnr(pred,gt).item(),
-            "swd":swdobj.run(pred.double(),gt.double()).item(),
+            "swd":swd_res,
             "fid":np.sum( [
                 fid( torch.squeeze(pred)[i,...], torch.squeeze(gt)[i,...] ).item()
                 for i in range( pred.shape[1] )

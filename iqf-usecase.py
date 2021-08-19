@@ -8,6 +8,7 @@ from scipy import ndimage
 from typing import Any, Dict, Optional, Union, Tuple, List
 
 import cv2
+import mlflow
 import numpy as np
 
 from iq_tool_box.datasets import DSWrapper
@@ -19,11 +20,13 @@ from custom_iqf import DSModifierMSRN, DSModifierFSRCNN,  DSModifierLIIF
 from custom_iqf import SimilarityMetrics
 
 mic = ''
-# shutil.rmtree(f"./Data/test{mic}-ds/.ipynb_checkpoints",ignore_errors=True)
-# for el in os.listdir("./Data"):
-#     if el!="test" and "#" in el:
-#         shutil.rmtree(os.path.join("./Data",el),ignore_errors=True)
-# shutil.rmtree("./mlruns",ignore_errors=True)
+# Remove previous mlflow records of previous executions of the same experiment
+try:
+    mlflow.delete_experiment(ExperimentInfo("experimentA").experiment_id)
+except:
+    pass
+shutil.rmtree("mlruns/.trash/",ignore_errors=True)
+shutil.rmtree(f"./Data/test{mic}-ds/.ipynb_checkpoints",ignore_errors=True)
 
 
 #Define name of IQF experiment
@@ -48,11 +51,11 @@ ds_modifiers_list = [
     DSModifierLIIF( params={
         'config0':"LIIF_config.json",
         'config1':"test_liif.yaml",
-        'model':"liif_UCMerced/epoch-best.pth"
+        'model':"LIIF_blur/epoch-best.pth" 
     } ),
     DSModifierFSRCNN( params={
-        'config':"test.json",
-        'model':"FSRCNN_1to033_x3_noblur/best.pth"
+        'config':"test_scale3.json",
+        'model':"FSRCNN_1to033_x3_blur/best.pth"
     } )
 ]
 
@@ -78,49 +81,83 @@ experiment_info = ExperimentInfo(experiment_name)
 
 print('Calculating similarity metrics...')
 
-win = 128
+# win = 128
+# _ = experiment_info.apply_metric_per_run(
+#     SimilarityMetrics(
+#         experiment_info,
+#         n_jobs               = 20,
+#         ext                  = 'tif',
+#         n_pyramids           = 2,
+#         slice_size           = 7,
+#         n_descriptors        = win*2,
+#         n_repeat_projection  = win,
+#         proj_per_repeat      = 4,
+#         device               = 'cpu',
+#         return_by_resolution = False,
+#         pyramid_batchsize    = win
+#     ),
+#     ds_wrapper.json_annotations,
+# )
 
-_ = experiment_info.apply_metric_per_run(
-    SimilarityMetrics(
-        experiment_info,
-        n_jobs               = 15,
-        ext                  = 'tif',
-        n_pyramids           = 2,
-        slice_size           = 7,
-        n_descriptors        = win*2,
-        n_repeat_projection  = win,
-        proj_per_repeat      = 4,
-        device               = 'cpu',
-        return_by_resolution = False,
-        pyramid_batchsize    = win
-    ),
-    ds_wrapper.json_annotations,
-)
+for win in [64,128,300]:
+    for n_pyramids in [2,3]:
+        for slice_size in [7,9,12,15]:
+            for proj_per_repeat in [4]:
+                try:
 
-print('Calculating RER Metric...')
+                    _ = experiment_info.apply_metric_per_run(
+                        SimilarityMetrics(
+                            experiment_info,
+                            n_jobs               = 20,
+                            ext                  = 'tif',
+                            n_pyramids           = n_pyramids,
+                            slice_size           = slice_size,
+                            n_descriptors        = win*2,
+                            n_repeat_projection  = win,
+                            proj_per_repeat      = proj_per_repeat,
+                            device               = 'cpu',
+                            return_by_resolution = False,
+                            pyramid_batchsize    = win
+                        ),
+                        ds_wrapper.json_annotations,
+                    )
 
-_ = experiment_info.apply_metric_per_run(
-    RERMetric(
-        experiment_info,
-        win=16,
-        stride=16,
-        ext="tif",
-        n_jobs=15
-    ),
-    ds_wrapper.json_annotations,
-)
+                    print('WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',{
+                        'win':win,
+                        'n_pyramids':n_pyramids,
+                        'slice_size':slice_size,
+                        'proj_per_repeat':proj_per_repeat
+                    })
 
-print('Calculating SNR Metric...')
+                except:
 
-_ = experiment_info.apply_metric_per_run(
-    SNRMetric(
-        experiment_info,
-        n_jobs=15,
-        ext="tif",
-        patch_sizes=[30],
-        confidence_limit=50.0
-    ),
-    ds_wrapper.json_annotations,
-)
+                    continue
+
+
+# print('Calculating RER Metric...')
+
+# _ = experiment_info.apply_metric_per_run(
+#     RERMetric(
+#         experiment_info,
+#         win=16,
+#         stride=16,
+#         ext="tif",
+#         n_jobs=20
+#     ),
+#     ds_wrapper.json_annotations,
+# )
+
+# print('Calculating SNR Metric...')
+
+# __ = experiment_info.apply_metric_per_run(
+#      SNRMetric(
+#          experiment_info,
+#          n_jobs=20,
+#          ext="tif",
+#          patch_sizes=[30],
+#          confidence_limit=50.0
+#      ),
+#      ds_wrapper.json_annotations,
+#  )
 
 
