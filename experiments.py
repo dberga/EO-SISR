@@ -19,24 +19,25 @@ from iq_tool_box.metrics import RERMetric, SNRMetric
 
 from custom_iqf import SimilarityMetrics
 
-def download_and_prepare_gt(resstr="033"):
+def download_and_prepare_gt(resstr="033",sufix=''):
 
     bucket_name = "image-quality-framework"
-    url = f"https://{bucket_name}.s3-eu-west-1.amazonaws.com/iq-sisr-use-case/datasets/GT_{resstr}.zip"
+    url = f"https://{bucket_name}.s3-eu-west-1.amazonaws.com/iq-sisr-use-case/datasets/GT_{resstr}{sufix}.zip"
 
-    gtdir = f"./Data_{resstr}/GT_{resstr}"
+    gtdir = f"./Data_{resstr}/GT_{resstr}{sufix}"
 
     os.system( f"wget {url} -O filename.zip" )
     os.system( f"chmod 775 filename.zip" )
 
     os.makedirs( gtdir, exist_ok=True )
 
-    os.system( f"unzip -o filename.zip -d {gtdir}")
+    os.system( f"unzip -o -q filename.zip -d {gtdir}")
     os.system( f"rm filename.zip" )
 
     src_img_dir = os.path.join( gtdir , os.listdir(gtdir)[0] )
     dst_img_dir = os.path.join( gtdir , "images" )
 
+    shutil.rmtree(f"{dst_img_dir}", ignore_errors=True)
     os.system( f"mv {src_img_dir} {dst_img_dir}" )
 
     annots_fn = os.path.join( gtdir , 'annotations.json' )
@@ -92,7 +93,7 @@ class DSModifierFake(DSModifier):
             url = f"https://{self.bucket_name}.s3-eu-west-1.amazonaws.com/iq-sisr-use-case/datasets/{self.zip_bucket_filename}"
 
             os.system( f"wget {url} -O {local_fn}" )
-            os.system( f"unzip {local_fn} -d {tmpdirname}")
+            os.system( f"unzip -q {local_fn} -d {tmpdirname}")
             
             self.images_dir = os.path.join(
                 tmpdirname,
@@ -136,14 +137,14 @@ def rm_experiment(resstr="033"):
         pass
     shutil.rmtree("mlruns/.trash/",ignore_errors=True)
 
-def execute_experiment(resstr="033"):
+def execute_experiment(resstr="033",sufix=''):
     """
     """
     #Define name of IQF experiment
     experiment_name = f"exp -> {resstr}"
 
     #Define path of the original(reference) dataset
-    data_path = f"./Data_{resstr}/GT_{resstr}"
+    data_path = f"./Data_{resstr}/GT_{resstr}{sufix}"
     
     #DS wrapper is the class that encapsulate a dataset
     ds_wrapper = DSWrapper(data_path=data_path)
@@ -193,11 +194,11 @@ def execute_experiment(resstr="033"):
 
     print('Calculating similarity metrics...')
 
-    win = 128
+    win = 64
     _ = experiment_info.apply_metric_per_run(
         SimilarityMetrics(
             experiment_info,
-            n_jobs               = 20,
+            n_jobs               = 1,
             img_dir_gt           = 'images',
             ext                  = 'tif',
             n_pyramids           = 2,
@@ -246,7 +247,7 @@ def execute_experiment(resstr="033"):
 
     print(df)
 
-    df.to_csv(f'./exp{resstr}.csv')
+    df.to_csv(f'./exp{resstr}{sufix}.csv')
 
 for resstr in [
     "03",
@@ -255,9 +256,10 @@ for resstr in [
     "07"
 ]:
     
-    download_and_prepare_gt(resstr=resstr)
+    download_and_prepare_gt(resstr=resstr,sufix='')#_LIIF
 
+    print('\n\n=============================================\n')
     print(f"EXECUTING EXPERIMENT WITH RES {resstr}...")
-    print('=============================================')
+    print('\n=============================================\n')
 
-    execute_experiment(resstr=resstr)
+    execute_experiment(resstr=resstr,sufix='')#_LIIF

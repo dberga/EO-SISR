@@ -625,7 +625,7 @@ class DSModifierFake(DSModifier):
         return input_name
 
     def _mod_img(self, image_file: str) -> np.array:
-
+        
         fn = [
             fn for fn in glob(os.path.join(self.images_dir,'*.'+self.dst_ext))
             if os.path.basename(image_file).split('.')[0]==os.path.basename(fn).split('.')[0]
@@ -645,7 +645,7 @@ class SimilarityMetrics( Metric ):
         self,
         experiment_info: ExperimentInfo,
         img_dir_gt: str = "test",
-        n_jobs: int = 1,
+        n_jobs: int = 20,
         ext: str = 'tif',
         n_pyramids:Union[int, None]=None,
         slice_size:int=7,
@@ -681,13 +681,79 @@ class SimilarityMetrics( Metric ):
         self.return_by_resolution = return_by_resolution
         self.pyramid_batchsize    = pyramid_batchsize
     
+    def _liff_loader_first_time(self,data_input:str) -> None:
+    
+        dsm_liif = DSModifierLIIF( params={
+                'config0':"LIIF_config.json",
+                'config1':"test_liif.yaml",
+                'model':"LIIF_blur/epoch-best.pth" 
+            } )
+                
+        spec = dsm_liif.spec
+
+        spec['batch_size'] = 1
+
+        spec['dataset'] = {
+            'name': 'image-folder',
+            'args': {
+                'root_path': data_input
+            }
+        }
+
+        self.spec = spec
+        
+        dataset = datasets_liif.make(spec['dataset'])
+        dataset = datasets_liif.make(spec['wrapper'], args={'dataset': dataset})
+
+        self.dataset = dataset
+
+    def _gen_liif_loader(self):
+
+        loader = DataLoader(self.dataset, batch_size=self.spec['batch_size'],shuffle=False,
+                num_workers=1, pin_memory=True)
+        
+        return loader
+
     def _parallel(self, fid:object,swdobj:object, pred_fn:str) -> List[Dict[str,Any]]:
 
         # pred_fn be like: xview_id1529imgset0012+hrn.png
         img_name = os.path.basename(pred_fn)
         gt_fn = os.path.join(self.data_path,self.img_dir_gt,f"{img_name}")
-        
-        if True:#'FSRCNN' in pred_fn or 'LIIF' in pred_fn:
+
+        #import pdb; pdb.set_trace()
+
+        if 'LIIF' in pred_fn:
+            
+            # pred
+
+            pred = cv2.imread( pred_fn )/255
+
+            # if 'LIIF' in pred_fn or 'FSRCNN' in pred_fn:
+            #     pred = pred[...,::-1].copy()
+            
+            pred = torch.from_numpy( pred )
+            pred = pred.view(1,-1,pred.shape[-2],pred.shape[-1])
+            pred = torch.transpose( pred, 3, 1 )
+
+            # gt
+            
+            loader = self._gen_liif_loader()
+
+            enu_file = [
+                enu for enu,fn in enumerate(
+                    sorted(glob(
+                        os.path.join(self.data_path,self.img_dir_gt,'*')
+                        ))
+                    )
+                if os.path.basename(fn)==img_name
+                ][0]
+            ## enu_file
+
+            batch = [batch for enu,batch in enumerate(loader) if enu==enu_file][0]
+
+            gt = batch['gt2']
+
+        else:
 
             pred = transforms.ToTensor()(pil_image.open(pred_fn).convert('RGB')).unsqueeze_(0)
             image = pil_image.open(gt_fn).convert('RGB')
@@ -699,13 +765,13 @@ class SimilarityMetrics( Metric ):
             kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
             gt = torch.clamp( kornia.filter2d(img_tensor, kernel_tensor[None]), min=0.0, max=1.0 )
 
-        else:
+        if False:
             
             pred = cv2.imread( pred_fn )/255
             gt = cv2.imread( gt_fn )/255
 
-            if 'LIIF' in pred_fn or 'FSRCNN' in pred_fn:
-                pred = pred[...,::-1].copy()
+            # if 'LIIF' in pred_fn or 'FSRCNN' in pred_fn:
+            #     pred = pred[...,::-1].copy()
             
             pred = torch.from_numpy( pred )
             gt = torch.from_numpy( gt )
@@ -779,6 +845,11 @@ class SimilarityMetrics( Metric ):
             modifier_subfold,
             '*',f'*.{self.ext}' 
         ))
+
+        if 'LIIF' in pred_fn_lst[0]:
+            self._liff_loader_first_time(
+                os.path.join(self.data_path,self.img_dir_gt)
+                )
         
         stats = { met:0.0 for met in self.metric_names }
         
@@ -794,8 +865,8 @@ class SimilarityMetrics( Metric ):
             return_by_resolution = self.return_by_resolution,
             pyramid_batchsize    = self.pyramid_batchsize
         )
-        
-        results_dict_lst = Parallel(n_jobs=self.n_jobs,verbose=30)(
+
+        results_dict_lst = Parallel(n_jobs=self.n_jobs,verbose=10)(
             delayed(self._parallel)(fid,swdobj,pred_fn)
             for pred_fn in pred_fn_lst
             )
