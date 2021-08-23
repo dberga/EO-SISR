@@ -13,11 +13,18 @@ ifndef MLF_PORT
 	MLF_PORT=5000
 endif
 
+PROJ_NAME=sisr
+CONTAINER_NAME="${PROJ_NAME}-${USER}"
+
 help:
 	@echo "build -- builds the docker image"
+	@echo "dockershell -- raises an interactive shell docker"
+	@echo "notebookshell -- launches a notebook server"
+	@echo "mlflow -- launches an mlflow server"
 
 build:
 	docker build -t sisr .
+	chmod 775 ./download.sh
 	./download.sh
 
 dockershell:
@@ -26,7 +33,7 @@ dockershell:
 	-it sisr
 
 notebookshell:
-	docker run --gpus all --privileged -itd --rm --name $(CONTAINER_NAME) \
+	docker run --gpus all --privileged -itd --rm --name $(CONTAINER_NAME)-nb \
 	-p ${NB_PORT}:${NB_PORT} \
 	-v $(shell pwd):/sisr -v $(DS_VOLUME):/scratch \
 	sisr \

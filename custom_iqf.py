@@ -40,6 +40,10 @@ from datasets.liif import datasets as datasets_liif
 from utils import utils_liif
 from models.liif import models as models_liif
 
+# ESRGAN
+import esrgan
+from models.esrgan import RRDBNet_arch as arch
+
 # Metrics
 from swd import SlicedWassersteinDistance
 
@@ -62,7 +66,7 @@ class ModelConfS3Loader():
         config_fn_lst = [],
         bucket_name   = "image-quality-framework",
         algo          = "FSRCNN",
-        msrn_scale    = 3
+        zoom          = 3
     ):
         
         self.fn_dict = {
@@ -75,7 +79,7 @@ class ModelConfS3Loader():
         self.config_fn_lst      =  config_fn_lst
         self.bucket_name        =  bucket_name
         self.algo               =  algo
-        self.msrn_scale         =  3
+        self.zoom               =  3
         
     def load_ai_model_and_stuff(self) -> List[Any]:
         
@@ -140,9 +144,16 @@ class ModelConfS3Loader():
                 args = None
                 model = self._load_model_msrn(
                     os.path.join(tmpdirname ,"model"),
-                    n_scale=self.msrn_scale
+                    n_scale=self.zoom
                 )
-                
+
+            elif self.algo=='ESRGAN':
+
+                args = esrgan.get_args( self.zoom )
+                model = self._load_model_esrgan(os.path.join(
+                    tmpdirname ,"model"
+                ) )
+
             else:
                 print(f"Error: unknown algo: {self.algo}")
                 raise
@@ -204,6 +215,17 @@ class ModelConfS3Loader():
     def _load_model_msrn(self,model_fn: str,n_scale:int = 3) -> Any:
         """Load MSRN Model"""
         return load_msrn_model(model_fn,n_scale=n_scale)
+
+    def _load_model_esrgan(self,model_fn: str) -> Any:
+        """Load ESRGAN Model"""
+        device = torch.device('cuda')
+        model = arch.RRDBNet(3, 3, 64, 23, gc=32)
+        #model.load_state_dict(torch.load(args.model_path), strict=True)
+        weights = torch.load(model_fn)
+        model.load_state_dict(weights['params'])
+        model.eval()
+        model = model.to(device)
+        return model
 
 #########################
 # Custom IQF
@@ -492,8 +514,8 @@ class DSModifierMSRN(DSModifier):
         
         params['algo'] = 'MSRN'
         algo           = params['algo']
-        
-        self.name = f"mfsr+{algo}_modifier"
+        subname = algo + '_'+os.path.splitext(params['model'])[0].replace('/','-')
+        self.name = f"sisr+{subname}"
         
         self.params: Dict[str, Any] = params
         self.ds_modifier = ds_modifier
@@ -504,7 +526,7 @@ class DSModifierMSRN(DSModifier):
                 config_fn_lst = [],
                 bucket_name   = "image-quality-framework",
                 algo          = "MSRN",
-                msrn_scale    = self.params['zoom']
+                zoom          = self.params['zoom']
         )
         
         self.model,_ = model_conf.load_ai_model_and_stuff()
@@ -564,6 +586,91 @@ class DSModifierMSRN(DSModifier):
             padding=5
         )
         
+        return rec_img
+
+
+class DSModifierESRGAN(DSModifier):
+    """
+    Class derived from DSModifier that modifies a dataset iterating its folder.
+
+    Args:
+        ds_modifer: DSModifier. Composed modifier child
+
+    Attributes:
+        name: str. Name of the modifier
+        ds_modifer: DSModifier. Composed modifier child
+        params: dict. Contains metainfomation of the modifier
+    """
+    def __init__(
+        self,
+        ds_modifier: Optional[DSModifier] = None,
+        params: Dict[str, Any] = {
+            "algo":"ESRGAN",
+            "zoom": 3,
+            "model": "./ESRGAN_1to033_x3_blur/net_g_latest.pth"
+        },
+    ):
+        
+        params['algo']              = 'ESRGAN'
+        algo                        = params['algo']
+        subname                     = algo + '_'+os.path.splitext(params['model'])[0].replace('/','-')
+        self.name                   = f"sisr+{subname}"
+        self.params: Dict[str, Any] = params
+        self.ds_modifier            = ds_modifier
+        self.device                 = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
+        self.params.update({"modifier": "{}".format(self._get_name())})
+
+        model_conf = ModelConfS3Loader(
+            model_fn      = params['model'],
+            config_fn_lst = [],
+            bucket_name   = "image-quality-framework",
+            algo          = "ESRGAN"
+        )
+        
+        self.model , self.args = model_conf.load_ai_model_and_stuff()
+        
+    def _ds_input_modification(self, data_input: str, mod_path: str) -> str:
+        """Modify images
+        Iterates the data_input path loading images, processing with _mod_img(), and saving to mod_path
+
+        Args
+            data_input: str. Path of the original folder containing images
+            mod_path: str. Path to the new dataset
+        Returns:
+            Name of the new folder containign the images
+        """
+        input_name = os.path.basename(data_input)
+        dst = os.path.join(mod_path, input_name)
+        os.makedirs(dst, exist_ok=True)
+        
+        print(f'For each image file in <{data_input}>...')
+        
+        for image_file in glob( os.path.join(data_input,'*.tif') ):
+            
+            imgp = self._mod_img( image_file )
+            print( imgp.shape )
+            cv2.imwrite( os.path.join(dst, os.path.basename(image_file)), imgp )
+        
+        print('Done.')
+        
+        return input_name
+
+    def _mod_img(self, image_file: str) -> np.array:
+
+        img = esrgan.generate_lowres( image_file , scale=self.args.zoom )
+
+        img = img * 1.0 / 255
+        img = torch.from_numpy(np.transpose(img[:, :, [2, 1, 0]], (2, 0, 1))).float()
+        img_LR = img.unsqueeze(0)
+        img_LR = img_LR.to(self.device)
+        
+        with torch.no_grad():
+            output = self.model(img_LR).data.squeeze().float().cpu().clamp_(0, 1).numpy()
+        output = np.transpose(output[[2, 1, 0], :, :], (1, 2, 0))
+        
+        rec_img = (output*255).astype(np.uint8)
+
         return rec_img
 
 #########################
@@ -751,7 +858,7 @@ class SimilarityMetrics( Metric ):
 
             batch = [batch for enu,batch in enumerate(loader) if enu==enu_file][0]
 
-            gt = batch['gt2']
+            gt = torch.clamp( batch['gt2'] , min=0.0, max=1.0 )
 
         else:
 
@@ -845,6 +952,10 @@ class SimilarityMetrics( Metric ):
             modifier_subfold,
             '*',f'*.{self.ext}' 
         ))
+
+        if len(pred_fn_lst)==0:
+            print('Error > empty list "pred_fn_lst" ')
+            import pdb; pdb.set_trace()
 
         if 'LIIF' in pred_fn_lst[0]:
             self._liff_loader_first_time(
