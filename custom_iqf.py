@@ -21,6 +21,7 @@ from iq_tool_box.metrics import Metric
 from iq_tool_box.experiments import ExperimentInfo
 
 from joblib import Parallel, delayed
+from joblib.externals.loky.backend.context import get_context
 
 import torch.backends.cudnn as cudnn
 
@@ -311,7 +312,7 @@ class DSModifierLIIF(DSModifier):
         dataset = datasets_liif.make(spec['dataset'])
         dataset = datasets_liif.make(spec['wrapper'], args={'dataset': dataset})
         loader = DataLoader(dataset, batch_size=spec['batch_size'],shuffle=False,
-                           num_workers=1, pin_memory=True)
+                           num_workers=1, pin_memory=False ) #pin_memory=True
         
         if data_norm is None:
         
@@ -761,7 +762,8 @@ class SimilarityMetrics( Metric ):
         proj_per_repeat:int=4,
         device:str='cpu',
         return_by_resolution:bool=False,
-        pyramid_batchsize:int=128
+        pyramid_batchsize:int=128,
+        use_liif_loader : bool = True
     ) -> None:
         
         self.img_dir_gt = img_dir_gt
@@ -787,6 +789,8 @@ class SimilarityMetrics( Metric ):
         self.device               = device
         self.return_by_resolution = return_by_resolution
         self.pyramid_batchsize    = pyramid_batchsize
+
+        self.use_liif_loader      = use_liif_loader
     
     def _liff_loader_first_time(self,data_input:str) -> None:
     
@@ -817,7 +821,7 @@ class SimilarityMetrics( Metric ):
     def _gen_liif_loader(self):
 
         loader = DataLoader(self.dataset, batch_size=self.spec['batch_size'],shuffle=False,
-                num_workers=1, pin_memory=True)
+                num_workers=1, pin_memory=True, multiprocessing_context=get_context('loky'))
         
         return loader
 
@@ -829,15 +833,14 @@ class SimilarityMetrics( Metric ):
 
         #import pdb; pdb.set_trace()
 
-        if 'LIIF' in pred_fn:
+        if self.use_liif_loader and 'LIIF' in pred_fn:
             
             # pred
 
             pred = cv2.imread( pred_fn )/255
 
-            # if 'LIIF' in pred_fn or 'FSRCNN' in pred_fn:
-            #     pred = pred[...,::-1].copy()
-            
+            pred = pred[...,::-1].copy()
+
             pred = torch.from_numpy( pred )
             pred = pred.view(1,-1,pred.shape[-2],pred.shape[-1])
             pred = torch.transpose( pred, 3, 1 )
@@ -854,30 +857,21 @@ class SimilarityMetrics( Metric ):
                     )
                 if os.path.basename(fn)==img_name
                 ][0]
-            ## enu_file
 
             batch = [batch for enu,batch in enumerate(loader) if enu==enu_file][0]
 
-            gt = torch.clamp( batch['gt2'] , min=0.0, max=1.0 )
+            gt = torch.clamp( batch['gt'] , min=0.0, max=1.0 )
 
-        else:
+            ih, iw = batch['inp'].shape[-2:]
+            s = math.sqrt(batch['coord'].shape[1] / (ih * iw))
+            shape = [round(ih * s), round(iw * s), 3]
+            gt = batch['gt'].view(1, *shape).transpose(3,1)
 
-            pred = transforms.ToTensor()(pil_image.open(pred_fn).convert('RGB')).unsqueeze_(0)
-            image = pil_image.open(gt_fn).convert('RGB')
-            img_tensor = transforms.ToTensor()(image).unsqueeze_(0)
-            scale = 3
-            sigma = 0.5*scale
-            #( int(sigma*3+4)+1 if (int(sigma*3+4))%2==0 else int(sigma*3+4) )
-            kernel_size = 9
-            kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
-            gt = torch.clamp( kornia.filter2d(img_tensor, kernel_tensor[None]), min=0.0, max=1.0 )
-
-        if False:
+        elif not self.use_liif_loader and 'LIIF' in pred_fn:
             
             pred = cv2.imread( pred_fn )/255
             gt = cv2.imread( gt_fn )/255
 
-            # if 'LIIF' in pred_fn or 'FSRCNN' in pred_fn:
             #     pred = pred[...,::-1].copy()
             
             pred = torch.from_numpy( pred )
@@ -888,6 +882,17 @@ class SimilarityMetrics( Metric ):
             
             pred = torch.transpose( pred, 3, 1 )
             gt   = torch.transpose( gt  , 3, 1 )
+
+        else:
+
+            pred = transforms.ToTensor()(pil_image.open(pred_fn).convert('RGB')).unsqueeze_(0)
+            image = pil_image.open(gt_fn).convert('RGB')
+            img_tensor = transforms.ToTensor()(image).unsqueeze_(0)
+            scale = 3
+            sigma = 0.5*scale
+            kernel_size = 9
+            kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
+            gt = torch.clamp( kornia.filter2d(img_tensor, kernel_tensor[None]), min=0.0, max=1.0 )
         
         results_dict = {
             "ssim":None,
@@ -900,35 +905,76 @@ class SimilarityMetrics( Metric ):
             
             #print('different size found', pred.size(), gt.size())
             
-            pred = torch.clamp( LRSimulator(None,3)._resize(
+            pred_for_metrics = torch.clamp( LRSimulator(None,3)._resize(
                     pred,
                     gt.shape[-2],
                     interpolation = 'bicubic',
-                    align_corners = None,
+                    align_corners = True,
                     side = "short",
-                    antialias = False,
+                    antialias = False
                 ), min=0.0, max=1.0 )
             
-            if pred.size()!=gt.size():
-                #print('different size found', pred.size(), gt.size())
+            if pred_for_metrics.size()!=gt.size():
                 return results_dict
 
+        else:
 
-        try:
-            swd_res = swdobj.run(pred.double(),gt.double()).item()
-        except:
-            swd_res = None
+            pred_for_metrics = pred
         
         results_dict = {
-            "ssim":piq.ssim(pred,gt).item(),
-            "psnr":piq.psnr(pred,gt).item(),
-            "swd":swd_res,
+            "ssim":piq.ssim(pred_for_metrics,gt).item(),
+            "psnr":piq.psnr(pred_for_metrics,gt).item(),
             "fid":np.sum( [
-                fid( torch.squeeze(pred)[i,...], torch.squeeze(gt)[i,...] ).item()
-                for i in range( pred.shape[1] )
-                ] ) / pred.shape[1]
+                fid( torch.squeeze(pred_for_metrics)[i,...], torch.squeeze(gt)[i,...] ).item()
+                for i in range( pred_for_metrics.shape[1] )
+                ] ) / pred_for_metrics.shape[1]
         }
+        
+        # Make gt even
+        if gt.shape[-2]%2!=0 : # gt size is odd
 
+            gt_for_swd = torch.clamp( LRSimulator(None,3)._resize(
+                    gt,
+                    gt.shape[-2]+1,
+                    interpolation = 'bicubic',
+                    align_corners = True,
+                    side = "short",
+                    antialias = False
+                ), min=0.0, max=1.0 )
+
+        else:
+
+            gt_for_swd = gt
+            
+        # Pred should be same as GT
+        if pred.size()!=gt_for_swd.size():
+            
+            pred_for_swd = torch.clamp( LRSimulator(None,3)._resize(
+                    pred,
+                    gt_for_swd.shape[-2],
+                    interpolation = 'bicubic',
+                    align_corners = True,
+                    side = "short",
+                    antialias = False
+                ), min=0.0, max=1.0 )
+
+            if pred_for_swd.size()!=gt_for_swd.size():
+                results_dict['swd'] = None
+                return results_dict
+                
+        else:
+
+            pred_for_swd = pred
+
+        try:
+            swd_res = swdobj.run(pred_for_swd.double(),gt_for_swd.double()).item()
+        except Exception as e:
+            print('Failed SWD > ',str(e))
+            print('dimensions', pred_for_swd.shape, gt_for_swd.shape)
+            swd_res = None
+        
+        results_dict['swd'] = swd_res
+        
         return results_dict
 
     def apply(self, predictions: str, gt_path: str) -> Any:
@@ -977,7 +1023,7 @@ class SimilarityMetrics( Metric ):
             pyramid_batchsize    = self.pyramid_batchsize
         )
 
-        results_dict_lst = Parallel(n_jobs=self.n_jobs,verbose=10)(
+        results_dict_lst = Parallel(n_jobs=self.n_jobs,verbose=10,prefer='threads')(
             delayed(self._parallel)(fid,swdobj,pred_fn)
             for pred_fn in pred_fn_lst
             )

@@ -16,24 +16,27 @@ from iq_tool_box.experiments import ExperimentInfo, ExperimentSetup
 from iq_tool_box.experiments.task_execution import PythonScriptTaskExecution
 from iq_tool_box.metrics import RERMetric, SNRMetric
 
-from custom_iqf import DSModifierMSRN, DSModifierFSRCNN,  DSModifierLIIF
+from custom_iqf import DSModifierMSRN, DSModifierFSRCNN,  DSModifierLIIF, DSModifierESRGAN
 from custom_iqf import SimilarityMetrics
 
-mic = ''
-# Remove previous mlflow records of previous executions of the same experiment
-try:
-    mlflow.delete_experiment(ExperimentInfo("experimentA").experiment_id)
-except:
-    pass
-shutil.rmtree("mlruns/.trash/",ignore_errors=True)
-shutil.rmtree(f"./Data/test{mic}-ds/.ipynb_checkpoints",ignore_errors=True)
-
+def rm_experiment(experiment_name = "SiSR"):
+    """Remove previous mlflow records of previous executions of the same experiment"""
+    try:
+        mlflow.delete_experiment(ExperimentInfo(f"{experiment_name}").experiment_id)
+    except:
+        pass
+    shutil.rmtree("mlruns/.trash/",ignore_errors=True)
+    os.makedirs("mlruns/.trash/",exist_ok=True)
+    shutil.rmtree(f"./Data/test-ds/.ipynb_checkpoints",ignore_errors=True)
 
 #Define name of IQF experiment
-experiment_name = "experimentA"
+experiment_name = "SiSR"
+
+# Remove previous mlflow records of previous executions of the same experiment
+rm_experiment(experiment_name = experiment_name)
 
 #Define path of the original(reference) dataset
-data_path = f"./Data/test{mic}-ds"
+data_path = f"./Data/test-ds"
 
 #DS wrapper is the class that encapsulate a dataset
 ds_wrapper = DSWrapper(data_path=data_path)
@@ -56,6 +59,10 @@ ds_modifiers_list = [
     DSModifierFSRCNN( params={
         'config':"test_scale3.json",
         'model':"FSRCNN_1to033_x3_blur/best.pth"
+    } ),
+    DSModifierESRGAN( params={
+        'zoom':3,
+        'model':"ESRGAN_1to033_x3_blur/net_g_latest.pth"
     } )
 ]
 
@@ -81,83 +88,57 @@ experiment_info = ExperimentInfo(experiment_name)
 
 print('Calculating similarity metrics...')
 
-# win = 128
-# _ = experiment_info.apply_metric_per_run(
-#     SimilarityMetrics(
-#         experiment_info,
-#         n_jobs               = 20,
-#         ext                  = 'tif',
-#         n_pyramids           = 2,
-#         slice_size           = 7,
-#         n_descriptors        = win*2,
-#         n_repeat_projection  = win,
-#         proj_per_repeat      = 4,
-#         device               = 'cpu',
-#         return_by_resolution = False,
-#         pyramid_batchsize    = win
-#     ),
-#     ds_wrapper.json_annotations,
-# )
+win = 64
+_ = experiment_info.apply_metric_per_run(
+    SimilarityMetrics(
+        experiment_info,
+        n_jobs               = 1,
+        ext                  = 'tif',
+        n_pyramids           = 2,
+        slice_size           = 7,
+        n_descriptors        = win*2,
+        n_repeat_projection  = win,
+        proj_per_repeat      = 4,
+        device               = 'cpu',
+        return_by_resolution = False,
+        pyramid_batchsize    = win,
+        use_liif_loader      = True
+    ),
+    ds_wrapper.json_annotations,
+)
 
-for win in [64,128,300]:
-    for n_pyramids in [2,3]:
-        for slice_size in [7,9,12,15]:
-            for proj_per_repeat in [4]:
-                try:
+print('Calculating RER Metric...')
 
-                    _ = experiment_info.apply_metric_per_run(
-                        SimilarityMetrics(
-                            experiment_info,
-                            n_jobs               = 20,
-                            ext                  = 'tif',
-                            n_pyramids           = n_pyramids,
-                            slice_size           = slice_size,
-                            n_descriptors        = win*2,
-                            n_repeat_projection  = win,
-                            proj_per_repeat      = proj_per_repeat,
-                            device               = 'cpu',
-                            return_by_resolution = False,
-                            pyramid_batchsize    = win
-                        ),
-                        ds_wrapper.json_annotations,
-                    )
+_ = experiment_info.apply_metric_per_run(
+    RERMetric(
+        experiment_info,
+        win=16,
+        stride=16,
+        ext="tif",
+        n_jobs=15
+    ),
+    ds_wrapper.json_annotations,
+)
 
-                    print('WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',{
-                        'win':win,
-                        'n_pyramids':n_pyramids,
-                        'slice_size':slice_size,
-                        'proj_per_repeat':proj_per_repeat
-                    })
+print('Calculating SNR Metric...')
 
-                except:
+__ = experiment_info.apply_metric_per_run(
+     SNRMetric(
+         experiment_info,
+         n_jobs=15,
+         ext="tif",
+         patch_sizes=[30],
+         confidence_limit=50.0
+     ),
+     ds_wrapper.json_annotations,
+ )
 
-                    continue
+df = experiment_info.get_df(
+    ds_params=["modifier"],
+    metrics=['ssim','psnr','swd','snr','fid','rer_0','rer_1','rer_2'],
+    dropna=False
+)
 
+print(df)
 
-# print('Calculating RER Metric...')
-
-# _ = experiment_info.apply_metric_per_run(
-#     RERMetric(
-#         experiment_info,
-#         win=16,
-#         stride=16,
-#         ext="tif",
-#         n_jobs=20
-#     ),
-#     ds_wrapper.json_annotations,
-# )
-
-# print('Calculating SNR Metric...')
-
-# __ = experiment_info.apply_metric_per_run(
-#      SNRMetric(
-#          experiment_info,
-#          n_jobs=20,
-#          ext="tif",
-#          patch_sizes=[30],
-#          confidence_limit=50.0
-#      ),
-#      ds_wrapper.json_annotations,
-#  )
-
-
+df.to_csv(f'./{experiment_name}.csv')

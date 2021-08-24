@@ -129,21 +129,25 @@ class DSModifierFake(DSModifier):
         
         return rec_img
 
-def rm_experiment(resstr="033"):
-    # Remove previous mlflow records of previous executions of the same experiment
+def rm_experiment(experiment_name):
+    """Remove previous mlflow records of previous executions of the same experiment"""
     try:
-        mlflow.delete_experiment(ExperimentInfo(f"exp -> {resstr}").experiment_id)
+        mlflow.delete_experiment(ExperimentInfo(experiment_name).experiment_id)
     except:
         pass
     shutil.rmtree("mlruns/.trash/",ignore_errors=True)
+    os.makedirs("mlruns/.trash/",exist_ok=True)
 
-def execute_experiment(resstr="033",sufix=''):
+def execute_experiment( zip_bucket_filename_lst, resstr="033", sufix='' ):
     """
     """
-    #Define name of IQF experiment
-    experiment_name = f"exp -> {resstr}"
+    # Define name of IQF experiment
+    experiment_name = f"exp -> {resstr}{sufix}"
 
-    #Define path of the original(reference) dataset
+    # Remove previous mlflow records of previous executions of the same experiment
+    rm_experiment( experiment_name )
+
+    # Define path of the original(reference) dataset
     data_path = f"./Data_{resstr}/GT_{resstr}{sufix}"
     
     #DS wrapper is the class that encapsulate a dataset
@@ -164,12 +168,7 @@ def execute_experiment(resstr="033",sufix=''):
             params = {
                 "zoom": 3
                 })
-        for zip_bucket_filename in [
-            f'ESRGAN_1to{resstr}.zip',
-            f'FSRCNN_1to{resstr}.zip',
-            f'MSRN_1to{resstr}.zip',
-            f'LIIF_1to{resstr}.zip'
-            ]
+        for zip_bucket_filename in zip_bucket_filename_lst
     ]
 
     # Task execution executes the training loop
@@ -194,11 +193,11 @@ def execute_experiment(resstr="033",sufix=''):
 
     print('Calculating similarity metrics...')
 
-    win = 64
+    win = 128
     _ = experiment_info.apply_metric_per_run(
         SimilarityMetrics(
             experiment_info,
-            n_jobs               = 1,
+            n_jobs               = 20,
             img_dir_gt           = 'images',
             ext                  = 'tif',
             n_pyramids           = 2,
@@ -208,7 +207,8 @@ def execute_experiment(resstr="033",sufix=''):
             proj_per_repeat      = 4,
             device               = 'cpu',
             return_by_resolution = False,
-            pyramid_batchsize    = win
+            pyramid_batchsize    = win,
+            use_liif_loader      = False
         ),
         ds_wrapper.json_annotations,
     )
@@ -245,7 +245,9 @@ def execute_experiment(resstr="033",sufix=''):
         dropna=False
     )
 
+    print("\n\n************************************\n\n")
     print(df)
+    print("\n\n************************************\n\n")
 
     df.to_csv(f'./exp{resstr}{sufix}.csv')
 
@@ -255,11 +257,26 @@ for resstr in [
     "05",
     "07"
 ]:
-    
-    download_and_prepare_gt(resstr=resstr,sufix='')#_LIIF
 
-    print('\n\n=============================================\n')
-    print(f"EXECUTING EXPERIMENT WITH RES {resstr}...")
-    print('\n=============================================\n')
+    for enu,zip_bucket_filename_lst in enumerate([
+        [
+            f'LIIF_1to{resstr}.zip'
+        ],
+        [
+            f'ESRGAN_1to{resstr}.zip',
+            f'FSRCNN_1to{resstr}.zip',
+            f'MSRN_1to{resstr}.zip'
+        ]
+    ]):
 
-    execute_experiment(resstr=resstr,sufix='')#_LIIF
+        download_and_prepare_gt(resstr=resstr,sufix=('_LIIF' if enu==0 else ''))#_LIIF
+
+        print('\n\n=============================================\n')
+        print(f"EXECUTING EXPERIMENT WITH RES {resstr}...")
+        print('\n=============================================\n')
+
+        execute_experiment(
+            zip_bucket_filename_lst,
+            resstr=resstr,
+            sufix=('_LIIF' if enu==0 else '')
+        )#_LIIF
