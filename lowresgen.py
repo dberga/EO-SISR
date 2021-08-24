@@ -15,7 +15,7 @@ class LRSimulator(object):
         self.img_array = img_array
         self.scale = 1/zoom
 
-    def generate_low_resolution_image(self) -> "np.ndarray":
+    def add_blur(self) -> "np.ndarray":
         
         img = self._image_to_tensor(self.img_array.copy()).float()[None]
         
@@ -27,8 +27,19 @@ class LRSimulator(object):
         kernel_tensor = self._get_gaussian_kernel2d((kernel_size,kernel_size), (sigma, sigma))
         
         blurred = self._filter2d(img, kernel_tensor[None])
-        blurred_resize = self._rescale(blurred, float(self.scale), 'bicubic')
+
+        return blurred
+
+    def resize_to_lr(self,input_img) -> "np.ndarray":
+
+        blurred_resize = self._rescale(input_img, float(self.scale), 'bicubic')
         blurred_resize = blurred_resize.numpy()[0].transpose(1,2,0).astype(np.uint8)
+        return blurred_resize
+
+    def generate_low_resolution_image(self) -> "np.ndarray":
+        
+        input_img = self.add_blur()
+        blurred_resize = self.resize_to_lr(input_img)
         return blurred_resize
     
     def _compute_padding(self,kernel_size: List[int]) -> List[int]:
