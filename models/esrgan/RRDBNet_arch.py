@@ -70,7 +70,7 @@ class RRDBNet(nn.Module):
         fea = self.conv_first(x)
         body_feat = self.conv_body(self.body(fea)) #trunk = self.trunk_conv(self.RRDB_trunk(fea))
         fea = fea + body_feat #fea = fea + trunk
-        fea = self.lrelu(self.conv_up1(F.interpolate(fea, scale_factor=2, mode='nearest'))) #fea = self.lrelu(self.upconv1(F.interpolate(fea, scale_factor=2, mode='nearest')))
+        fea = self.lrelu(self.conv_up1(F.interpolate(fea, scale_factor=3, mode='nearest'))) #fea = self.lrelu(self.upconv1(F.interpolate(fea, scale_factor=2, mode='nearest')))
         # fea = self.lrelu(self.upconv2(F.interpolate(fea, scale_factor=2, mode='nearest')))
         out = self.conv_last(self.lrelu(self.conv_hr(fea))) #out = self.conv_last(self.lrelu(self.HRconv(fea)))
 
