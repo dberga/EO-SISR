@@ -92,7 +92,7 @@ win = 64
 _ = experiment_info.apply_metric_per_run(
     SimilarityMetrics(
         experiment_info,
-        n_jobs               = 1,
+        n_jobs               = 15,
         ext                  = 'tif',
         n_pyramids           = 2,
         slice_size           = 7,

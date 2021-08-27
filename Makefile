@@ -45,7 +45,7 @@ notebookshell:
 	--port=${NB_PORT}
 
 mlflow:
-	docker run --privileged -itd --rm --name $(CONTAINER_NAME) \
+	docker run --privileged -itd --rm --name $(CONTAINER_NAME)-mlf \
 	-p ${MLF_PORT}:${MLF_PORT} \
 	-v $(shell pwd):/sisr -v $(DS_VOLUME):/scratch \
 	sisr \

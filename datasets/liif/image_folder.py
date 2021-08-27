@@ -11,7 +11,6 @@ from torchvision import transforms
 
 from datasets.liif.datasets import register
 
-
 @register('image-folder')
 class ImageFolder(Dataset):
 
@@ -32,7 +31,7 @@ class ImageFolder(Dataset):
         for filename in filenames:
             file = os.path.join(root_path, filename)
 
-            if cache == 'none':
+            if cache == 'none' or cache == 'filename':
                 self.files.append(file)
 
             elif cache == 'bin':
@@ -62,6 +61,9 @@ class ImageFolder(Dataset):
         if self.cache == 'none':
             return transforms.ToTensor()(Image.open(x).convert('RGB'))
 
+        elif self.cache == 'filename':
+            return x
+        
         elif self.cache == 'bin':
             with open(x, 'rb') as f:
                 x = pickle.load(f)

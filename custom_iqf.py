@@ -149,7 +149,7 @@ class ModelConfS3Loader():
                 )
 
             elif self.algo=='ESRGAN':
-
+                
                 args = esrgan.get_args( self.zoom )
                 model = self._load_model_esrgan(os.path.join(
                     tmpdirname ,"model"
@@ -667,7 +667,9 @@ class DSModifierESRGAN(DSModifier):
         img_LR = img_LR.to(self.device)
         
         with torch.no_grad():
+
             output = self.model(img_LR).data.squeeze().float().cpu().clamp_(0, 1).numpy()
+
         output = np.transpose(output[[2, 1, 0], :, :], (1, 2, 0))
         
         rec_img = (output*255).astype(np.uint8)
@@ -865,7 +867,7 @@ class SimilarityMetrics( Metric ):
             ih, iw = batch['inp'].shape[-2:]
             s = math.sqrt(batch['coord'].shape[1] / (ih * iw))
             shape = [round(ih * s), round(iw * s), 3]
-            gt = batch['gt'].view(1, *shape).transpose(3,1)
+            gt = torch.clamp( batch['gt'].view(1, *shape).transpose(3,1), min=0.0, max=1.0 )
 
         elif not self.use_liif_loader and 'LIIF' in pred_fn:
             

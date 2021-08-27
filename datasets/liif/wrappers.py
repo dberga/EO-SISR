@@ -14,7 +14,6 @@ from torchvision.utils import save_image
 from datasets.liif.datasets import register
 from utils.utils_liif import to_pixel_samples
 
-
 @register('sr-implicit-paired')
 class SRImplicitPaired(Dataset):
 
@@ -81,7 +80,6 @@ class SRImplicitPaired(Dataset):
             'gt': hr_rgb
         }
 
-
 def resize_fn(img, size):
     return transforms.ToTensor()(
         transforms.Resize(size, Image.BICUBIC)(
@@ -110,7 +108,7 @@ class SRImplicitDownsampled(Dataset):
     def __getitem__(self, idx):
         img = self.dataset[idx]
         s = random.uniform(self.scale_min, self.scale_max)
-
+        
         ##### AFEGIT BLUR
         crop_size = (img.shape[1], img.shape[2])
         random_crop = kornia.augmentation.RandomCrop(crop_size, )
@@ -180,7 +178,8 @@ class SRImplicitDownsampled(Dataset):
             'inp': crop_lr,
             'coord': hr_coord,
             'cell': cell,
-            'gt': hr_rgb
+            'gt': hr_rgb,
+            'gt2':crop_hr
         }
 
 

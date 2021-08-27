@@ -1,8 +1,8 @@
 joblib
-jupyterlab
 notebook
-piq==0.5.5
+piq
 boto3
 tensorboardX
 tqdm
 imageio
+scikit-image

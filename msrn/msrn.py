@@ -6,6 +6,7 @@ from torch import nn
 from torch.utils import data
 import torch.nn.functional as F
 
+import math
 import os
 import cv2
 import sys
@@ -135,7 +136,17 @@ class noiseLayer_normal(nn.Module):
 class WindowsDataset_SR(data.Dataset):
     def __init__(self, nimg, wind_size=512, stride=480, scale=2):
         
+        x_in = kornia.image_to_tensor(nimg).float()
+        x_in = torch.unsqueeze(x_in, 0)
+        sigma = 0.5 * scale
+        kernel_size = math.ceil(sigma * 3 + 4)
+        kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
+        x_in = kornia.filter2d(x_in, kernel_tensor[None])[0]
+        x_in = kornia.geometry.rescale(x_in, 1 / scale, 'bicubic')
+        nimg = kornia.tensor_to_image(torch.squeeze(x_in))
+        
         self.nimg = nimg
+
         H, W, C = nimg.shape
         self.H = H
         self.W = W
@@ -229,7 +240,7 @@ def inference_model(model, nimg, wind_size=512, stride=480, scale=2,
             x_in = sample['x_in'].to(device)
         else:
             x_in = sample['x_in'].cuda()
-            
+        
         if add_noise is not None:
             add_noise_layer = noiseLayer_normal(add_noise, mean=0, std=0.2)
             x_in = add_noise_layer(x_in)
@@ -268,7 +279,7 @@ def inference_model(model, nimg, wind_size=512, stride=480, scale=2,
     res = np.divide(output, counts)
     return res
 
-def load_msrn_model(weights_path=None, cuda='0'):
+def load_msrn_model(weights_path=None, cuda='0',n_scale=3):
     """
     Load MSRN traied model on specific GPU for inference
     
@@ -282,7 +293,7 @@ def load_msrn_model(weights_path=None, cuda='0'):
     if cuda is not None:
         import os
         os.environ["CUDA_VISIBLE_DEVICES"]=cuda
-    model = MSRN_Upscale(n_scale=2)
+    model = MSRN_Upscale(n_scale=n_scale)
     
     if weights_path is None:
         weights_path="model.pth"
@@ -324,6 +335,7 @@ def process_file_msrn(
     )
 
     # inference
+
     result = inference_model(
         model, nimg,
         wind_size=wind_size, stride=stride,
@@ -338,7 +350,8 @@ def process_file_msrn(
     #sfactor = int(10* (1/(scale*res_output))) / 10 # round up to 2nd decimal
     #H,W = result.shape[:2]
     #H_t, W_t = int(H*sfactor), int(W*sfactor)
-    result = cv2.resize(result, (out_win,out_win), cv2.INTER_AREA)
+    if result.shape[-2]!=out_win:
+        result = cv2.resize(result, (out_win,out_win), cv2.INTER_AREA)
 
     return result
 
@@ -391,7 +404,7 @@ class MSRN_Upscale(nn.Module):
               
         # tail
         self.conv_up = nn.Conv2d(self.n_feats, self.n_feats, kernel_size=3, stride=1, padding=1, bias=1)
-        self.pixel_shuffle = nn.Upsample(scale_factor=self.n_scale, mode='bicubic')
+        self.pixel_shuffle = nn.Upsample(scale_factor=self.n_scale, mode='bicubic',align_corners=False)
         self.conv_output = nn.Conv2d(self.n_feats, n_input_channels, kernel_size=3, stride=1, padding=1)
         
         self.relu = nn.ReLU(inplace=True)

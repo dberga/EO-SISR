@@ -18,7 +18,7 @@ def generate_lowres(image_file,scale=3):
     """
     """
     image = pil_image.open(image_file).convert('RGB')
-
+    
     # AFEGIT PER FER EL BLUR
     img_tensor = transforms.ToTensor()(image).unsqueeze_(0)
     sigma = 0.5 * scale
@@ -26,12 +26,12 @@ def generate_lowres(image_file,scale=3):
     kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
     image_blur = kornia.filter2d(img_tensor, kernel_tensor[None])
     image = transforms.ToPILImage()(image_blur.squeeze_(0))
-
     image = image.resize((int(image.width // scale), int(image.height // scale)), resample=pil_image.BICUBIC)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         fn = os.path.join(tmpdir,'image.tif')
         image.save(fn)
+        
         return cv2.imread(fn, cv2.IMREAD_COLOR)
 
 def get_args( zoom ):
