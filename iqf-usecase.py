@@ -49,7 +49,7 @@ python_ml_script_path = 'custom_train.py'
 ds_modifiers_list = [
     DSModifierMSRN( params={
         'zoom':3,
-        'model':"MSRN/MSRN_1to033_x3_blur/model_epoch_1500.pth"
+        'model':"MSRN_nonoise/MSRN_1to033/model_epoch_1500.pth"
     } ),
     DSModifierLIIF( params={
         'config0':"LIIF_config.json",
@@ -88,13 +88,13 @@ experiment_info = ExperimentInfo(experiment_name)
 
 print('Calculating similarity metrics...')
 
-win = 64
+win = 28
 _ = experiment_info.apply_metric_per_run(
     SimilarityMetrics(
         experiment_info,
         n_jobs               = 15,
         ext                  = 'tif',
-        n_pyramids           = 2,
+        n_pyramids           = 1,
         slice_size           = 7,
         n_descriptors        = win*2,
         n_repeat_projection  = win,
