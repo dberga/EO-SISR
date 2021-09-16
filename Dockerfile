@@ -33,7 +33,7 @@ RUN pip3 install pip --upgrade
 
 WORKDIR /sisr
 
-RUN pip3 install git+https://gitlab+deploy-token-28:xkxRsx2anp-u3_V4aAK9@publicgitlab.satellogic.com/iqf/iq_tool_box-
+RUN pip3 install git+https://gitlab+deploy-token-28:xkxRsx2anp-u3_V4aAK9@publicgitlab.satellogic.com/iqf/iq_tool_box-@regressor-rebase-b
 
 COPY requirements.txt ./
 RUN pip3 install --no-cache-dir -r requirements.txt

@@ -15,6 +15,7 @@ from iq_tool_box.datasets import DSWrapper
 from iq_tool_box.experiments import ExperimentInfo, ExperimentSetup
 from iq_tool_box.experiments.task_execution import PythonScriptTaskExecution
 from iq_tool_box.metrics import RERMetric, SNRMetric
+from iq_tool_box.quality_metrics import RERMetrics, SNRMetrics, GaussianBlurMetrics, NoiseSharpnessMetrics, ResolScaleMetrics
 
 from custom_iqf import DSModifierMSRN, DSModifierFSRCNN,  DSModifierLIIF, DSModifierESRGAN
 from custom_iqf import SimilarityMetrics
@@ -142,3 +143,27 @@ df = experiment_info.get_df(
 print(df)
 
 df.to_csv(f'./{experiment_name}.csv')
+
+print('Calculating Regressor Quality Metrics...') #default configurations
+
+_ = experiment_info.apply_metric_per_run(RERMetrics(), ds_wrapper.json_annotations)
+_ = experiment_info.apply_metric_per_run(SNRMetrics(), ds_wrapper.json_annotations)
+_ = experiment_info.apply_metric_per_run(GaussianBlurMetrics(), ds_wrapper.json_annotations)
+_ = experiment_info.apply_metric_per_run(NoiseSharpnessMetrics(), ds_wrapper.json_annotations)
+_ = experiment_info.apply_metric_per_run(ResolScaleMetrics(), ds_wrapper.json_annotations)
+
+df = experiment_info.get_df(
+    ds_params=["modifier"],
+    metrics=[
+            "rer",
+            "snr",
+            "sigma",
+            "sharpness",
+            "scale"
+        ],
+    dropna=False
+)
+
+print(df)
+
+df.to_csv(f'./{experiment_name}_regressor.csv')
