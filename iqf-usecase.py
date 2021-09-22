@@ -80,7 +80,7 @@ experiment = ExperimentSetup(
     ref_dsw_val=ds_wrapper,
     repetitions=1
 )
-
+print(ds_wrapper.json_annotations)
 #Execute the experiment
 experiment.execute()
 # ExperimentInfo is used to retrieve all the information of the whole experiment. 
@@ -146,7 +146,6 @@ print(df)
 df.to_csv(f'./{experiment_name}.csv')
 '''
 print('Calculating Regressor Quality Metrics...') #default configurations
-import pdb; pdb.set_trace()
 _ = experiment_info.apply_metric_per_run(RERMetrics(), ds_wrapper.json_annotations)
 _ = experiment_info.apply_metric_per_run(SNRMetrics(), ds_wrapper.json_annotations)
 _ = experiment_info.apply_metric_per_run(GaussianBlurMetrics(), ds_wrapper.json_annotations)
