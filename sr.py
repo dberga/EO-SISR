@@ -1,0 +1,93 @@
+import argparse
+import json
+import os
+from shutil import copyfile
+
+"""
+class SR:
+    def apply():
+        ...
+"""
+current_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+output_images_folder = "generated_sr_images"
+base_ds = os.path.join(current_path, "test_datasets")
+print("premain")
+if __name__ == "__main__":
+    print("main")
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--train_ds", default=os.path.join(base_ds, "ds_coco_dataset")
+    )  # ds_coco_dataset
+    parser.add_argument(
+        "--val_ds", default=os.path.join(base_ds, "ds_coco_dataset")
+    )  # ds_coco_dataset
+    parser.add_argument("--outputpath", default=os.path.join(current_path, "tmp/"))
+    args = parser.parse_args()
+    parser.add_argument(
+        "--traindsinput",
+        default=os.path.join(
+            args.train_ds, "test"
+        ),
+    )  # default subforlder from task ds (ds_wrapper.data_input)
+    parser.add_argument(
+        "--valdsinput",
+        default=os.path.join(
+            args.val_ds, "test"
+        ),
+    )
+    args = parser.parse_args()
+    print(args)
+    train_ds = args.train_ds
+    val_ds = args.val_ds
+    output_path = args.outputpath
+    train_ds_input = args.traindsinput
+    val_ds_input = args.valdsinput
+
+    # MOCK SR: create generated_sr_images from copy
+
+    # read train_ds and val_ds files and apply super-resolution, save in output_path/val/generated_sr_images folder
+
+    train_ds_output = os.path.join(
+        output_path, "train", output_images_folder
+    )  # train_ds_input
+    val_ds_output = os.path.join(
+        output_path, "val", output_images_folder
+    )  # val_ds_input
+
+    # create subfolders
+    if not os.path.exists(output_path):
+        os.mkdir(output_path)
+    if not os.path.exists(os.path.join(output_path, "train")):
+        os.mkdir(os.path.join(output_path, "train"))
+    if not os.path.exists(os.path.join(output_path, "val")):
+        os.mkdir(os.path.join(output_path, "val"))
+
+    if not os.path.exists(train_ds_output):
+        os.mkdir(train_ds_output)
+    if not os.path.exists(val_ds_output):
+        os.mkdir(val_ds_output)
+
+    # to do: SR.apply()
+    # generate / (mock sr=copy images)
+    image_files = os.listdir(train_ds_input)
+    for idx, image_name in enumerate(image_files):
+        copyfile(train_ds_input + "/" + image_name, train_ds_output + "/" + image_name)
+    image_files = os.listdir(val_ds_input)
+    for idx, image_name in enumerate(image_files):
+        copyfile(val_ds_input + "/" + image_name, val_ds_output + "/" + image_name)
+
+    """
+    #alternative (old): copy input image paths as output image paths
+    train_ds_output=train_ds_input
+    val_ds_output=val_ds_input
+    """
+    output_json = {
+        "train_ds": train_ds,
+        "train_ds_input": train_ds_input,
+        "train_ds_output": train_ds_output,
+        "val_ds": val_ds,
+        "val_ds_input": val_ds_input,
+        "val_ds_output": val_ds_output,
+    }
+    with open(os.path.join(output_path, "output.json"), "w") as f:
+        json.dump(output_json, f)

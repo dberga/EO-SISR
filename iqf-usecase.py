@@ -38,12 +38,10 @@ rm_experiment(experiment_name = experiment_name)
 
 #Define path of the original(reference) dataset
 data_path = f"./Data/test-ds"
+images_path = os.path.join(data_path,"test")
 
 #DS wrapper is the class that encapsulate a dataset
 ds_wrapper = DSWrapper(data_path=data_path)
-
-#Define path of the training script
-python_ml_script_path = 'custom_train.py'
 
 #List of modifications that will be applied to the original dataset:
 
@@ -67,6 +65,9 @@ ds_modifiers_list = [
     } )
 ]
 
+#Define path of the training script
+python_ml_script_path = 'sr.py'
+
 # Task execution executes the training loop
 task = PythonScriptTaskExecution( model_script_path = python_ml_script_path )
 
@@ -76,17 +77,17 @@ experiment = ExperimentSetup(
     task_instance=task,
     ref_dsw_train=ds_wrapper,
     ds_modifiers_list=ds_modifiers_list,
+    ref_dsw_val=ds_wrapper,
     repetitions=1
 )
 
 #Execute the experiment
 experiment.execute()
-
 # ExperimentInfo is used to retrieve all the information of the whole experiment. 
 # It contains built in operations but also it can be used to retrieve raw data for futher analysis
 
 experiment_info = ExperimentInfo(experiment_name)
-
+'''
 print('Calculating similarity metrics...')
 
 win = 28
@@ -143,9 +144,9 @@ df = experiment_info.get_df(
 print(df)
 
 df.to_csv(f'./{experiment_name}.csv')
-
+'''
 print('Calculating Regressor Quality Metrics...') #default configurations
-
+import pdb; pdb.set_trace()
 _ = experiment_info.apply_metric_per_run(RERMetrics(), ds_wrapper.json_annotations)
 _ = experiment_info.apply_metric_per_run(SNRMetrics(), ds_wrapper.json_annotations)
 _ = experiment_info.apply_metric_per_run(GaussianBlurMetrics(), ds_wrapper.json_annotations)
@@ -160,8 +161,7 @@ df = experiment_info.get_df(
             "sigma",
             "sharpness",
             "scale"
-        ],
-    dropna=False
+        ]
 )
 
 print(df)
