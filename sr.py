@@ -15,7 +15,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--traindsinput",
         default=os.path.join(
-            args.trainds, "test"
+            args.trainds, "test" # images
         ),
     )  # default subforlder from task ds (ds_wrapper.data_input)
     parser.add_argument(
@@ -25,7 +25,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--valdsinput",
         default=os.path.join(
-            args.valds, "test"
+            args.valds, "test" # images
         ),
     )
     args = parser.parse_args()
@@ -34,16 +34,14 @@ if __name__ == "__main__":
     val_ds = args.valds
     val_ds_input = args.valdsinput
     output_path = args.outputpath
-    
-    # MOCK SR: create generated_sr_images from copy
 
-    # read train_ds and val_ds files and apply super-resolution, save in output_path/val/generated_sr_images folder
+    # objective: read train_ds and val_ds files and apply super-resolution, save in output_path/val/generated_sr_images folder
 
-
-    
     # alternative (old): copy input image paths as output image paths
     train_ds_output=train_ds_input
     val_ds_output=val_ds_input
+
+    # MOCK SR: create generated_sr_images from copy
     
     '''
     train_ds_output = os.path.join(

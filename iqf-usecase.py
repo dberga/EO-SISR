@@ -80,14 +80,14 @@ experiment = ExperimentSetup(
     ref_dsw_val=ds_wrapper,
     repetitions=1
 )
-print(ds_wrapper.json_annotations)
+
 #Execute the experiment
 experiment.execute()
 # ExperimentInfo is used to retrieve all the information of the whole experiment. 
 # It contains built in operations but also it can be used to retrieve raw data for futher analysis
 
 experiment_info = ExperimentInfo(experiment_name)
-'''
+
 print('Calculating similarity metrics...')
 
 win = 28
@@ -144,7 +144,7 @@ df = experiment_info.get_df(
 print(df)
 
 df.to_csv(f'./{experiment_name}.csv')
-'''
+
 print('Calculating Regressor Quality Metrics...') #default configurations
 _ = experiment_info.apply_metric_per_run(RERMetrics(), ds_wrapper.json_annotations)
 _ = experiment_info.apply_metric_per_run(SNRMetrics(), ds_wrapper.json_annotations)
@@ -155,11 +155,11 @@ _ = experiment_info.apply_metric_per_run(ResolScaleMetrics(), ds_wrapper.json_an
 df = experiment_info.get_df(
     ds_params=["modifier"],
     metrics=[
-            "rer",
-            "snr",
-            "sigma",
-            "sharpness",
-            "scale"
+            "q_rer",
+            "q_snr",
+            "q_sigma",
+            "q_sharpness",
+            "q_scale"
         ]
 )
 

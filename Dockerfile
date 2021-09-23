@@ -28,6 +28,7 @@ RUN echo 'alias python=python3.6' >> ~/.bashrc
 RUN echo 'alias python3=python3.6' >> ~/.bashrc
 RUN echo 'alias pip=pip3.6' >> ~/.bashrc
 RUN echo 'alias pip3=pip3.6' >> ~/.bashrc
+RUN echo 'ln -s /usr/bin/python3 /usr/bin/python' >> ~/.bashrc
 
 RUN pip3 install pip --upgrade
 
