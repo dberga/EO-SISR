@@ -155,11 +155,11 @@ _ = experiment_info.apply_metric_per_run(ResolScaleMetrics(), ds_wrapper.json_an
 df = experiment_info.get_df(
     ds_params=["modifier"],
     metrics=[
-            "q_rer",
-            "q_snr",
-            "q_sigma",
-            "q_sharpness",
-            "q_scale"
+            "rer",
+            "snr",
+            "sigma",
+            "sharpness",
+            "scale"
         ]
 )
 
