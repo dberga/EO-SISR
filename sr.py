@@ -11,19 +11,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "--trainds", default=os.path.join(base_ds, "ds_coco_dataset")
     )  # ds_coco_dataset
-    args,uk_args = parser.parse_known_args()
+    args, uk_args = parser.parse_known_args()
     parser.add_argument("--valds", default=args.trainds)  # ds_coco_dataset
     parser.add_argument(
         "--traindsinput",
-        default=os.path.join(args.trainds, "test"),  # images
+        default=os.path.join(args.trainds, "test"),  # test or images
     )  # default subforlder from task ds (ds_wrapper.data_input)
-    args,uk_args = parser.parse_known_args()
+    args, uk_args = parser.parse_known_args()
     parser.add_argument(
         "--valdsinput",
-        default=os.path.join(args.valds, "test"),  # images
+        default=os.path.join(args.valds, "test"),  # test or images
     )
-    args = parser.parse_args()
-    
+    args, uk_args = parser.parse_known_args()
+
     train_ds = args.trainds
     train_ds_input = args.traindsinput
     val_ds = args.valds
