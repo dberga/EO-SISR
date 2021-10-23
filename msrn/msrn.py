@@ -141,7 +141,7 @@ class WindowsDataset_SR(data.Dataset):
         sigma = 0.5 * scale
         kernel_size = math.ceil(sigma * 3 + 4)
         kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
-        x_in = kornia.filter2d(x_in, kernel_tensor[None])[0]
+        x_in = kornia.filters.filter2d(x_in, kernel_tensor[None])[0]
         x_in = kornia.geometry.rescale(x_in, 1 / scale, 'bicubic')
         nimg = kornia.tensor_to_image(torch.squeeze(x_in))
         
