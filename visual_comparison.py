@@ -17,7 +17,11 @@ def scatter_plots(df):
     for pair_metrics in [
         ['ssim','psnr'],
         ['fid','swd'],
-        ['rer_0','snr']
+        ['rer_0','snr_0'],
+        ['rer_0','rer'],
+        ['snr_0','snr'],
+        ['sigma','rer'],
+        ['sharpness','snr'],
     ]:
 
         met1, met2 = pair_metrics
