@@ -15,9 +15,9 @@ from iq_tool_box.datasets import DSWrapper
 from iq_tool_box.experiments import ExperimentInfo, ExperimentSetup
 from iq_tool_box.experiments.task_execution import PythonScriptTaskExecution
 from iq_tool_box.metrics import RERMetric, SNRMetric
-from iq_tool_box.quality_metrics import RERMetrics, SNRMetrics, GaussianBlurMetrics, NoiseSharpnessMetrics, ResolScaleMetrics
+from iq_tool_box.quality_metrics import RERMetrics, SNRMetrics, GaussianBlurMetrics, NoiseSharpnessMetrics, GSDMetrics
 
-from custom_iqf import DSModifierMSRN, DSModifierFSRCNN,  DSModifierLIIF, DSModifierESRGAN
+from custom_iqf import DSModifierMSRN, DSModifierFSRCNN,  DSModifierLIIF, DSModifierESRGAN, DSModifierCAR, DSModifierSRGAN
 from custom_iqf import SimilarityMetrics
 
 def rm_experiment(experiment_name = "SiSR"):
@@ -46,9 +46,20 @@ ds_wrapper = DSWrapper(data_path=data_path)
 #List of modifications that will be applied to the original dataset:
 
 ds_modifiers_list = [
+    DSModifierSRGAN( params={
+        "arch": "srgan_2x2",
+        "model_path": "./models/srgan/weights/PSNR.pth",
+        "gpu": 0,
+        "seed": 666,
+    } ),
+    DSModifierCAR( params={
+        "SCALE": 2,
+        "model_dir": "./models/car/models",
+        "gpu": 0,
+    } ),
     DSModifierMSRN( params={
-        'zoom':3,
-        'model':"MSRN_nonoise/MSRN_1to033/model_epoch_1500.pth"
+    'zoom':3,
+    'model':"MSRN_nonoise/MSRN_1to033/model_epoch_1500.pth"
     } ),
     DSModifierLIIF( params={
         'config0':"LIIF_config.json",
@@ -62,7 +73,7 @@ ds_modifiers_list = [
     DSModifierESRGAN( params={
         'zoom':3,
         'model':"ESRGAN_1to033_x3_blur/net_g_latest.pth"
-    } )
+    } ),
 ]
 
 #Define path of the training script
@@ -87,6 +98,8 @@ experiment.execute()
 # It contains built in operations but also it can be used to retrieve raw data for futher analysis
 
 experiment_info = ExperimentInfo(experiment_name)
+
+import pdb; pdb.set_trace()
 
 print('Calculating similarity metrics...')
 
@@ -150,7 +163,7 @@ _ = experiment_info.apply_metric_per_run(RERMetrics(), ds_wrapper.json_annotatio
 _ = experiment_info.apply_metric_per_run(SNRMetrics(), ds_wrapper.json_annotations)
 _ = experiment_info.apply_metric_per_run(GaussianBlurMetrics(), ds_wrapper.json_annotations)
 _ = experiment_info.apply_metric_per_run(NoiseSharpnessMetrics(), ds_wrapper.json_annotations)
-_ = experiment_info.apply_metric_per_run(ResolScaleMetrics(), ds_wrapper.json_annotations)
+_ = experiment_info.apply_metric_per_run(GSDMetrics(), ds_wrapper.json_annotations)
 
 df = experiment_info.get_df(
     ds_params=["modifier"],

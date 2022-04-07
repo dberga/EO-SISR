@@ -9,6 +9,7 @@ import yaml
 import signal
 import time
 import math
+import shutil
 
 import numpy as np
 import PIL.Image as pil_image
@@ -44,6 +45,12 @@ from models.liif import models as models_liif
 # ESRGAN
 import esrgan
 from models.esrgan import RRDBNet_arch as arch
+
+# CAR
+from models.car.car import CAR
+
+# SRGAN
+from models.srgan.srgan import SRGAN
 
 # Metrics
 from swd import SlicedWassersteinDistance
@@ -674,6 +681,73 @@ class DSModifierESRGAN(DSModifier):
         
         rec_img = (output*255).astype(np.uint8)
 
+        return rec_img
+
+class DSModifierCAR(DSModifier):
+    def __init__(
+        self,
+        ds_modifier: Optional[DSModifier] = None,
+        params: Dict[str, Any] = {
+            "SCALE": 2,
+            "model_dir": "./models/car/models",
+            "gpu": 0,
+        },
+    ):
+        self.params = params
+        self.ds_modifier = ds_modifier
+        self.CAR = CAR(SCALE=self.params["SCALE"],model_dir=self.params["model_dir"],gpu=self.params["gpu"])
+        self.name = f"CAR_scale{params['SCALE']}_modifier"
+        self.params.update({"modifier": "{}".format(self._get_name())})
+
+    def _ds_input_modification(self, data_input: str, mod_path: str) -> str:
+        
+        input_name = os.path.basename(data_input)
+        dst = os.path.join(mod_path, input_name)
+        os.makedirs(dst, exist_ok=True)
+        for data_file in os.listdir(data_input):
+            file_path = os.path.join(data_input, data_file)
+            dst_file = os.path.join(dst, data_file)
+            rec_img = self._mod_img(file_path)
+            self.CAR.pilsaveimage(rec_img,dst_file)
+            
+        return input_name
+
+    def _mod_img(self, image_file: str) -> np.array:
+        rec_img = self.CAR.run_upscale(image_file)
+        rec_img = self.CAR.pytensor2pil(rec_img)
+        return rec_img
+
+class DSModifierSRGAN(DSModifier):
+    def __init__(
+        self,
+        ds_modifier: Optional[DSModifier] = None,
+        params: Dict[str, Any] = {
+            "arch": "srgan_2x2",
+            "model_path": "./models/srgan/weights/PSNR.pth",
+            "gpu": 0,
+            "seed": 666,
+        },
+    ):
+        self.params = params
+        self.ds_modifier = ds_modifier
+        self.SRGAN = SRGAN(arch=self.params["arch"],model_path=self.params["model_path"],gpu=self.params["gpu"],seed=self.params["seed"])
+        self.name = f"SRGAN_arch{self.params['arch']}_modifier"
+        self.params.update({"modifier": "{}".format(self._get_name())})
+
+    def _ds_input_modification(self, data_input: str, mod_path: str) -> str:
+        
+        input_name = os.path.basename(data_input)
+        dst = os.path.join(mod_path, input_name)
+        os.makedirs(dst, exist_ok=True)
+        for data_file in os.listdir(data_input):
+            file_path = os.path.join(data_input, data_file)
+            dst_file = os.path.join(dst, data_file)
+            rec_img = self._mod_img(file_path)
+            self.SRGAN.saveimage(rec_img,dst_file)
+        return input_name
+
+    def _mod_img(self, image_file: str) -> np.array:
+        rec_img = self.SRGAN.run_sr(image_file)
         return rec_img
 
 #########################

@@ -1,4 +1,4 @@
-from EDSR import common
+from . import common
 
 import torch
 import torch.nn as nn
