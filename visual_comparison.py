@@ -12,17 +12,20 @@ from PIL import Image as pil_image
 # Visual comparison
 #########################
 
-def scatter_plots(df):
-    
-    for pair_metrics in [
+def scatter_plots(df, 
+    metrics = [
         ['ssim','psnr'],
         ['fid','swd'],
         ['rer_0','snr_0'],
         ['rer_0','rer'],
-        ['snr_0','snr'],
+        ['snr_mean','snr'],
         ['sigma','rer'],
         ['sharpness','snr'],
-    ]:
+    ],
+    savefig = False,
+    plots_folder = "plots/"):
+    
+    for pair_metrics in metrics:
 
         met1, met2 = pair_metrics
 
@@ -55,23 +58,35 @@ def scatter_plots(df):
         ax.set_ylabel(met2)
         ax.legend(title='Algorithms', bbox_to_anchor=(1.05, 1), loc='upper left')
         ax.grid(True)
+        
+        if savefig is True:
+            os.makedirs(plots_folder,exist_ok=True)
+            plt.savefig(os.path.join(plots_folder,"scatter_"+met1+"_"+met2+".png"))
+        else:
+            plt.show()
 
-        plt.show()
-
-def visual_comp():
+def visual_comp(
+    lst_folders = [
+    "./Data/test-ds/test/",
+    "./Data/test-ds#sisr+MSRN_MSRN_nonoise-MSRN_1to033-model_epoch_1500/test/",
+    "./Data/test-ds#sisr+ESRGAN_ESRGAN_1to033_x3_blur-net_g_latest/test/",
+    "./Data/test-ds#sisr+FSRCNN_test_scale3_FSRCNN_1to033_x3_blur-best/test/",
+    "./Data/test-ds#sisr+LIIF_LIIF_config_test_liif_LIIF_blur-epoch-best/test/"
+    ], 
+    lst_labels = [
+    "GT",
+    "MSRN",
+    "ESRGAN",
+    "FSRCNN",
+    "LIIF"
+    ],
+    savefig = False,
+    comparison_folder = "comparison/",
+    ):
+    lst_lst = [glob(fr"{os.path.join(folder,'*')}") for folder in lst_folders]
+    print(''.join(['\t\t'+label for label in lst_labels]))
     
-    lst_lst = [
-        glob(fr"./Data/test-ds/test/*"),
-        glob(fr"./Data/test-ds#sisr+MSRN_MSRN_nonoise-MSRN_1to033-model_epoch_1500/test/*"),
-        glob(fr"./Data/test-ds#sisr+ESRGAN_ESRGAN_1to033_x3_blur-net_g_latest/test/*"),
-        glob(fr"./Data/test-ds#sisr+FSRCNN_test_scale3_FSRCNN_1to033_x3_blur-best/test/*"),
-        glob(fr"./Data/test-ds#sisr+LIIF_LIIF_config_test_liif_LIIF_blur-epoch-best/test/*")
-    ]
-
-    print('\t\t"GT"\t\t"MSRN"\t\t"ESRGAN"\t\t"FSRCNN"\t\t"LIIF"')
-
     for enu,fn in enumerate(lst_lst[0]):
-
         if enu>20:
             break
 
@@ -89,15 +104,23 @@ def visual_comp():
             ][0] )[...,::-1]
             for i in range( n_alg ) 
         ]
-
         fig,ax = plt.subplots(1, n_alg ,figsize=(20,7), gridspec_kw={'wspace':0, 'hspace':0},squeeze=True)
         for i in range( n_alg ):
             ax[i].imshow( arr_lst[i])
             ax[i].axis('off')
-        plt.show()
+        
+        if savefig is True:
+            os.makedirs(comparison_folder,exist_ok=True)
+            plt.savefig(os.path.join(comparison_folder,os.path.basename(fn)))
+        else:
+            plt.show()
 
         fig,ax = plt.subplots(1, n_alg ,figsize=(20,7), gridspec_kw={'wspace':0, 'hspace':0},squeeze=True)
         for i in range( n_alg ):
             ax[i].imshow( arr_lst[i][75:-75:,75:-75:,:])
             ax[i].axis('off')
-        plt.show()
+        if savefig is True:
+            os.makedirs(comparison_folder,exist_ok=True)
+            plt.savefig(os.path.join(comparison_folder,"zoomed_"+os.path.basename(fn)))
+        else:
+            plt.show()
