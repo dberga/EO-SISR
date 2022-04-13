@@ -24,16 +24,22 @@ help:
 
 build:
 	docker build -t sisr .
-	chmod 775 ./download.sh
-	./download.sh
+
+download:
+        chmod 775 ./download.sh
+        ./download.sh
+
+setup:
+        chmod 775 ./models/car/adaptive_gridsampler/setup.sh
+        ./models/car/adaptive_gridsampler/setup.sh
 
 dockershell:
 	docker run --rm --name $(CONTAINER_NAME) --gpus all -p 9198:9198 \
-	-v $(shell pwd):/sisr -v $(DS_VOLUME):/scratch \
+	-v $(shell pwd):/sisr -v $(DS_VOLUME):/scratch -v \
 	-it sisr
 
 notebookshell:
-	docker run --gpus all --privileged -itd --rm --name $(CONTAINER_NAME)-nb \
+	docker run --gpus all --privileged -itd --name $(CONTAINER_NAME)-nb \
 	-p ${NB_PORT}:${NB_PORT} \
 	-v $(shell pwd):/sisr -v $(DS_VOLUME):/scratch \
 	sisr \
