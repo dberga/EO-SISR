@@ -36,7 +36,7 @@ def rm_experiment(experiment_name = "SiSR"):
 experiment_name = "SiSR"
 
 # Remove previous mlflow records of previous executions of the same experiment
-# rm_experiment(experiment_name = experiment_name)
+rm_experiment(experiment_name = experiment_name)
 
 #Define path of the original(reference) dataset
 data_path = f"./Data/test-ds"
@@ -96,7 +96,7 @@ for sr_folder in ds_modifiers_found:
     sr_dir=os.path.join(sr_folder,images_folder)
     if len(os.listdir(sr_dir)) == len(os.listdir(images_path)) and sr_name in list(ds_modifiers_indexes_dict.keys()):
         index_modifier = ds_modifiers_indexes_dict[sr_name]
-        ds_modifiers_list[index_modifier]=DSModifierFake(name=sr_name,images_dir = sr_dir)
+        ds_modifiers_list[index_modifier]=DSModifierFake(name=sr_name,images_dir = sr_dir,params = {"modifier": sr_name})
 
 #Define path of the training script
 python_ml_script_path = 'sr.py'
@@ -120,7 +120,6 @@ experiment.execute()
 # It contains built in operations but also it can be used to retrieve raw data for futher analysis
 
 experiment_info = ExperimentInfo(experiment_name)
-
 
 print('Visualizing examples')
 
@@ -149,6 +148,20 @@ _ = experiment_info.apply_metric_per_run(
     ),
     ds_wrapper.json_annotations,
 )
+
+print('Calculating SNR Metric...')
+
+__ = experiment_info.apply_metric_per_run(
+     SNRMetric(
+         experiment_info,
+         ext="tif",
+         method="HB",
+         patch_size=30, #patch_sizes=[30]
+         #confidence_limit=50.0,
+         #n_jobs=15
+     ),
+     ds_wrapper.json_annotations,
+ )
 
 print('Calculating RER Metric...')
 
@@ -182,7 +195,6 @@ df = experiment_info.get_df(
     metrics=['ssim','psnr','swd','snr_median','snr_mean','fid','rer_0','rer_1','rer_2'],
     dropna=False
 )
-df['ds_modifier']=df['name']
 print(df)
 df.to_csv(f'./{experiment_name}_metrics.csv')
 scatter_plots(df, [['ssim','psnr'],['fid','swd'],['rer_0','snr_mean'],['snr_mean','psnr']], True, "plots/")
@@ -204,7 +216,6 @@ df = experiment_info.get_df(
             "scale"
         ]
 )
-df['ds_modifier']=df['name']
 print(df)
 df.to_csv(f'./{experiment_name}_regressor.csv')
 scatter_plots(df, [['sigma','rer'],['sharpness','sigma'],['rer','snr'],['sharpness','rer'],['sigma','scale'],['snr','scale']], True, "plots/")
@@ -229,7 +240,6 @@ df = experiment_info.get_df(
             "scale"
         ]
 )
-df['ds_modifier']=df['name']
 print(df)
 df.to_csv(f'./{experiment_name}.csv')
 scatter_plots(df, [['sigma','rer_0'],['rer','rer_0'],['sharpness','rer_0'],['snr','snr_mean'],['snr','psnr'],['scale','rer'],['scale','snr']], True, "plots/")
