@@ -27,10 +27,12 @@ def rm_experiment(experiment_name = "SiSR"):
         mlflow.delete_experiment(ExperimentInfo(f"{experiment_name}").experiment_id)
     except:
         pass
-    shutil.rmtree("mlruns/.trash/",ignore_errors=True)
+    shutil.rmtree("mlruns/",ignore_errors=True)
     os.makedirs("mlruns/.trash/",exist_ok=True)
     shutil.rmtree(f"./Data/test-ds/.ipynb_checkpoints",ignore_errors=True)
     [shutil.rmtree(x) for x in glob(os.path.join(os.getcwd(), "**", '__pycache__'), recursive=True)]
+    os.makedirs("mlruns_tmp/",exist_ok=True)
+    shutil.move("mlruns/","mlruns_tmp/")
     
 #Define name of IQF experiment
 experiment_name = "SiSR"
@@ -125,10 +127,9 @@ experiment_info = ExperimentInfo(experiment_name)
 print('Visualizing examples')
 
 lst_folders_mod = [images_path]+[os.path.join(data_path+'#'+ds_modifier._get_name(),images_folder) for ds_modifier in ds_modifiers_list]
-lst_labels_mod = ["GT"]+[ds_modifier._get_name() for ds_modifier in ds_modifiers_list]
+lst_labels_mod = ["GT"]+[ds_modifier._get_name().replace("sisr+","").split("_")[0] for ds_modifier in ds_modifiers_list] # authomatic readout from folders
 
 visual_comp(lst_folders_mod, lst_labels_mod, True, "comparison/")
-
 
 print('Calculating similarity metrics...')
 
