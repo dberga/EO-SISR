@@ -1,0 +1,3 @@
+./mlruns*
+./Data/*
+.ipynb_checkpoints
