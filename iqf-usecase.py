@@ -13,6 +13,7 @@ import numpy as np
 
 from iq_tool_box.datasets import DSWrapper
 from iq_tool_box.experiments import ExperimentInfo, ExperimentSetup
+from iq_tool_box.experiments.experiment_visual import ExperimentVisual
 from iq_tool_box.experiments.task_execution import PythonScriptTaskExecution
 from iq_tool_box.metrics import RERMetric, SNRMetric
 from iq_tool_box.quality_metrics import RERMetrics, SNRMetrics, GaussianBlurMetrics, NoiseSharpnessMetrics, GSDMetrics
@@ -28,11 +29,8 @@ def rm_experiment(experiment_name = "SiSR"):
     except:
         pass
     shutil.rmtree("mlruns/",ignore_errors=True)
-    os.makedirs("mlruns/.trash/",exist_ok=True)
     shutil.rmtree(f"./Data/test-ds/.ipynb_checkpoints",ignore_errors=True)
     [shutil.rmtree(x) for x in glob(os.path.join(os.getcwd(), "**", '__pycache__'), recursive=True)]
-    os.makedirs("mlruns_tmp/",exist_ok=True)
-    shutil.move("mlruns/","mlruns_tmp/")
     
 #Define name of IQF experiment
 experiment_name = "SiSR"
@@ -72,7 +70,7 @@ ds_modifiers_list = [
     } ),
     DSModifierSRGAN( params={
         #"arch": "srgan_2x2",
-        #"model_path": "./models/srgan/weights/PSNR.pth",
+        #"model_path": "./models/srgan/weights/PSNR_inria_scale2.pth",
         "arch": "srgan",
         "model_path": "./models/srgan/weights/PSNR_inria_scale4.pth",
         "gpu": 0,
@@ -184,6 +182,7 @@ df = experiment_info.get_df(
     metrics=['ssim','psnr','swd','snr_median','snr_mean','fid','rer_0','rer_1','rer_2'],
     dropna=False
 )
+df['ds_modifier']=df['name']
 print(df)
 df.to_csv(f'./{experiment_name}_metrics.csv')
 scatter_plots(df, [['ssim','psnr'],['fid','swd'],['rer_0','snr_mean'],['snr_mean','psnr']], True, "plots/")
@@ -199,15 +198,16 @@ df = experiment_info.get_df(
     ds_params=["modifier"],
     metrics=[
             "sigma",
-            "rer",
             "snr",
+            "rer",
             "sharpness",
             "scale"
         ]
 )
+df['ds_modifier']=df['name']
 print(df)
 df.to_csv(f'./{experiment_name}_regressor.csv')
-scatter_plots(df, [['sigma','rer'],['sharpness','sigma'],['rer','snr'],['sharpness','rer'],['snr','snr_mean'],['sigma','scale'],['snr','scale']], True, "plots/")
+scatter_plots(df, [['sigma','rer'],['sharpness','sigma'],['rer','snr'],['sharpness','rer'],['sigma','scale'],['snr','scale']], True, "plots/")
 
 print("Comparing Metrics with Regressed Quality Metrics")
 df = experiment_info.get_df(
@@ -216,11 +216,12 @@ df = experiment_info.get_df(
             "ssim",
             "psnr",
             "swd",
+            "snr_median",
             "snr_mean",
             "fid",
             "rer_0",
             "rer_1",
-            "rer_2"
+            "rer_2",
             "sigma",
             "rer",
             "snr",
@@ -228,5 +229,101 @@ df = experiment_info.get_df(
             "scale"
         ]
 )
+df['ds_modifier']=df['name']
+print(df)
 df.to_csv(f'./{experiment_name}.csv')
 scatter_plots(df, [['sigma','rer_0'],['rer','rer_0'],['sharpness','rer_0'],['snr','snr_mean'],['snr','psnr'],['scale','rer'],['scale','snr']], True, "plots/")
+
+ev = ExperimentVisual(df, None)
+
+ev.visualize(
+    plot_kind="bars",
+    xvar="ds_modifier",
+    yvar="ssim",
+    legend_var='psnr',
+    title=""
+)
+ev.visualize(
+    plot_kind="bars",
+    xvar="ds_modifier",
+    yvar="swd",
+    legend_var='psnr',
+    title=""
+)
+ev.visualize(
+    plot_kind="bars",
+    xvar="ds_modifier",
+    yvar="fid",
+    legend_var='psnr',
+    title=""
+)
+ev.visualize(
+    plot_kind="bars",
+    xvar="ds_modifier",
+    yvar="snr_mean",
+    legend_var='snr_median',
+    title=""
+)
+ev.visualize(
+    plot_kind="bars",
+    xvar="ds_modifier",
+    yvar="rer_0",
+    legend_var='psnr',
+    title=""
+)
+ev.visualize(
+    plot_kind="bars",
+    xvar="ds_modifier",
+    yvar="rer_1",
+    legend_var='rer_0',
+    title=""
+)
+ev.visualize(
+    plot_kind="bars",
+    xvar="ds_modifier",
+    yvar="rer_2",
+    legend_var='rer_0',
+    title=""
+)
+ev.visualize(
+    plot_kind="bars",
+    xvar="ds_modifier",
+    yvar="sigma",
+    legend_var='psnr',
+    title=""
+)
+ev.visualize(
+    plot_kind="bars",
+    xvar="ds_modifier",
+    yvar="rer",
+    legend_var='psnr',
+    title=""
+)
+ev.visualize(
+    plot_kind="bars",
+    xvar="ds_modifier",
+    yvar="snr",
+    legend_var='psnr',
+    title=""
+)
+ev.visualize(
+    plot_kind="bars",
+    xvar="ds_modifier",
+    yvar="scale",
+    legend_var='psnr',
+    title=""
+)
+ev.visualize(
+    plot_kind="bars",
+    xvar="ds_modifier",
+    yvar="snr",
+    legend_var='snr_mean',
+    title=""
+)
+ev.visualize(
+    plot_kind="bars",
+    xvar="ds_modifier",
+    yvar="rer",
+    legend_var='rer_0',
+    title=""
+)
