@@ -47,10 +47,10 @@ import esrgan
 from models.esrgan import RRDBNet_arch as arch
 
 # CAR
-from models.car.car import CAR
+from models.car.car import CAR, pytensor2pil, pilsaveimage, load_car_model, resize_pil_img
 
 # SRGAN
-from models.srgan.srgan import SRGAN
+from models.srgan.srgan import SRGAN, load_srgan_model
 
 # Metrics
 from swd import SlicedWassersteinDistance
@@ -74,7 +74,9 @@ class ModelConfS3Loader():
         config_fn_lst = [],
         bucket_name   = "image-quality-framework",
         algo          = "FSRCNN",
-        zoom          = 3
+        zoom          = 3,
+        tmpdir        = "checkpoints/", #tempfile.TemporaryDirectory()
+        kwargs        = {},
     ):
         
         self.fn_dict = {
@@ -88,6 +90,8 @@ class ModelConfS3Loader():
         self.bucket_name        =  bucket_name
         self.algo               =  algo
         self.zoom               =  3
+        self.tmpdir             = tmpdir
+        self.kwargs             = kwargs
         
     def load_ai_model_and_stuff(self) -> List[Any]:
         
@@ -95,78 +99,79 @@ class ModelConfS3Loader():
         # First file is the model
         
         print( self.fn_dict["model"] )
-        
+
         fn_lst = [
             os.path.join("iq-sisr-use-case/models/weights",self.fn_dict["model"])
         ] + [
             os.path.join("iq-sisr-use-case/models/config",fn)
             for fn in self.config_fn_lst
         ]
+        tmpdirname = self.tmpdir
+        os.makedirs(tmpdirname, exist_ok = True)
+        #with tempfile as tmpdirname:
         
-        with tempfile.TemporaryDirectory() as tmpdirname:
+        print( self.fn_dict )
+        fn_dict_aux = {}
+        for k in self.fn_dict:
+
+            bucket_fn = self.fn_dict[k]
+
+            aux_k = k+"_"+self.fn_dict[k].replace("/","_")
+            local_fn = os.path.join(
+                tmpdirname , aux_k
+            )
+            fn_dict_aux[k] = local_fn
             
-            print( self.fn_dict )
+            kind = ('weights' if k=='model' else 'config')
             
-            for k in self.fn_dict:
+            url = f"https://{self.bucket_name}.s3-eu-west-1.amazonaws.com/iq-sisr-use-case/models/{kind}/{bucket_fn}"
 
-                bucket_fn = self.fn_dict[k]
-
-                local_fn = os.path.join(
-                    tmpdirname , k
-                )
-                
-                kind = ('weights' if k=='model' else 'config')
-                
-                url = f"https://{self.bucket_name}.s3-eu-west-1.amazonaws.com/iq-sisr-use-case/models/{kind}/{bucket_fn}"
-
-                print( url , ' ' , local_fn )
-
+            print( url , ' ' , local_fn )
+            
+            if not os.path.exists(local_fn):
                 os.system( f"wget {url} -O {local_fn}" )
 
-                if not os.path.exists( local_fn ):
-                    print( 'AWS model file not found' )
-                    raise
-
-            if self.algo=='FSRCNN':
-
-                args = self._load_args(os.path.join(
-                    tmpdirname ,"conf0"
-                ))
-                model = self._load_model_fsrcnn(os.path.join(
-                    tmpdirname ,"model"
-                ), args )
-
-            elif self.algo=='LIIF':
-                
-                args = self._load_args(os.path.join(
-                    tmpdirname ,"conf0"
-                ))
-                model = self._load_model_liif(os.path.join(
-                    tmpdirname ,"model"
-                ), args, os.path.join(
-                    tmpdirname ,"conf1"
-                ) )
-                
-            elif self.algo=='MSRN':
-                
-                args = None
-                model = self._load_model_msrn(
-                    os.path.join(tmpdirname ,"model"),
-                    n_scale=self.zoom
-                )
-
-            elif self.algo=='ESRGAN':
-                
-                args = esrgan.get_args( self.zoom )
-                model = self._load_model_esrgan(os.path.join(
-                    tmpdirname ,"model"
-                ) )
-
-            else:
-                print(f"Error: unknown algo: {self.algo}")
+            if not os.path.exists( local_fn ):
+                print( 'AWS model file not found' )
                 raise
 
-            return model , args
+        if self.algo=='FSRCNN':
+
+            args = self._load_args(fn_dict_aux["conf0"])
+            model = self._load_model_fsrcnn(fn_dict_aux["model"], args )
+
+        elif self.algo=='LIIF':
+            
+            args = self._load_args(fn_dict_aux["conf0"])
+            model = self._load_model_liif(fn_dict_aux["model"], args, fn_dict_aux["conf1"])
+            
+        elif self.algo=='MSRN':
+            
+            args = None
+            model = self._load_model_msrn(fn_dict_aux["model"],n_scale=self.zoom)
+
+        elif self.algo=='ESRGAN':
+            
+            args = esrgan.get_args( self.zoom )
+            model = self._load_model_esrgan(fn_dict_aux["model"])
+
+        elif self.algo=='CAR':
+            args = Args()
+            args.SCALE = self.kwargs["SCALE"]
+            args.zoom = self.kwargs["zoom"]
+            model = self._load_model_car(fn_dict_aux["model"], args.SCALE)
+
+        elif self.algo=='SRGAN':
+            args = Args()
+            args.arch = self.kwargs["arch"]
+            args.zoom = self.kwargs["zoom"]
+            model = self._load_model_srgan(fn_dict_aux["model"], args.arch )
+
+        else:
+            print(f"Error: unknown algo: {self.algo}")
+            raise
+
+        return model , args
     
     def _load_args( self, config_fn: str ) -> Any:
         """Load Args"""
@@ -234,6 +239,15 @@ class ModelConfS3Loader():
         model.eval()
         model = model.to(device)
         return model
+
+    def _load_model_car(self,model_fn: str, SCALE: int = 2) -> Any:
+        """Load CAR Model"""
+        return load_car_model(model_fn, SCALE)
+
+    def _load_model_srgan(self, model_fn: str, arch: str) -> Any:
+        """Load SRGAN Model"""
+        return load_srgan_model(model_fn, arch)
+
 
 #########################
 # Custom IQF
@@ -691,12 +705,24 @@ class DSModifierCAR(DSModifier):
             "SCALE": 2,
             "model_dir": "./models/car/models",
             "gpu": 0,
+            "zoom": 3,
         },
     ):
         self.params = params
         self.ds_modifier = ds_modifier
+        '''
+        model_conf = ModelConfS3Loader(
+                model_fn      = params['model'],
+                config_fn_lst = [],
+                bucket_name   = "image-quality-framework",
+                algo          = "CAR",
+                zoom          = params['SCALE'],
+        )
+        self.model,_ = model_conf.load_ai_model_and_stuff()
+        ''' # save in self.params["model_dir"]
+
         self.CAR = CAR(SCALE=self.params["SCALE"],model_dir=self.params["model_dir"],gpu=self.params["gpu"])
-        self.name = f"CAR_scale{params['SCALE']}_modifier"
+        self.name = f"CAR_scale{params['SCALE']}_x{params['zoom']}" # _modifier
         self.params.update({"modifier": "{}".format(self._get_name())})
 
     def _ds_input_modification(self, data_input: str, mod_path: str) -> str:
@@ -708,13 +734,19 @@ class DSModifierCAR(DSModifier):
             file_path = os.path.join(data_input, data_file)
             dst_file = os.path.join(dst, data_file)
             rec_img = self._mod_img(file_path)
-            self.CAR.pilsaveimage(rec_img,dst_file)
+            rec_img = pytensor2pil(rec_img)
+            # check image size, resize if reconstructed image is not the same
+            orig_w, orig_h = pil_image.open(file_path).size
+            rec_w, rec_h = rec_img.size
+            if rec_w != orig_w or rec_h != orig_h:
+                rec_img = resize_pil_img(rec_img, orig_w, orig_h) # downscale in case of 4x
+
+            pilsaveimage(rec_img,dst_file)
             
         return input_name
 
     def _mod_img(self, image_file: str) -> np.array:
-        rec_img = self.CAR.run_upscale(image_file)
-        rec_img = self.CAR.pytensor2pil(rec_img)
+        rec_img = self.CAR.run_upscale_resized(image_file, self.params['zoom'])
         return rec_img
 
 class DSModifierSRGAN(DSModifier):
@@ -726,12 +758,26 @@ class DSModifierSRGAN(DSModifier):
             "model_path": "./models/srgan/weights/PSNR.pth",
             "gpu": 0,
             "seed": 666,
+            "zoom": 2,
         },
     ):
         self.params = params
         self.ds_modifier = ds_modifier
+
+        '''
+        model_conf = ModelConfS3Loader(
+                model_fn      = params['model'],
+                config_fn_lst = [],
+                bucket_name   = "image-quality-framework",
+                algo          = "SRGAN",
+                kwargs          = {"arch": params['arch'], "zoom": params['zoom']},
+        )
+        self.model,_ = model_conf.load_ai_model_and_stuff()
+        ''' # save in self.params["model_path"]
+
+        checkpoint_name = os.path.splitext(os.path.basename(self.params["model_path"]))[0]
         self.SRGAN = SRGAN(arch=self.params["arch"],model_path=self.params["model_path"],gpu=self.params["gpu"],seed=self.params["seed"])
-        self.name = f"SRGAN_arch{self.params['arch']}_modifier"
+        self.name = f"SRGAN_arch_{self.params['arch']}_{checkpoint_name}_x{self.params['zoom']}" # _modifier
         self.params.update({"modifier": "{}".format(self._get_name())})
 
     def _ds_input_modification(self, data_input: str, mod_path: str) -> str:
@@ -743,11 +789,20 @@ class DSModifierSRGAN(DSModifier):
             file_path = os.path.join(data_input, data_file)
             dst_file = os.path.join(dst, data_file)
             rec_img = self._mod_img(file_path)
-            self.SRGAN.saveimage(rec_img,dst_file)
+            #torchvision.utils.save_image(rec_img,dst_file)
+            rec_img = pytensor2pil(rec_img)
+            # check image size, resize if reconstructed image is not the same
+            orig_w, orig_h = pil_image.open(file_path).size
+            rec_w, rec_h = rec_img.size
+            if rec_w != orig_w or rec_h != orig_h:
+                rec_img = resize_pil_img(rec_img, orig_w, orig_h) # downscale in case of 4x
+
+            pilsaveimage(rec_img,dst_file)
+
         return input_name
 
     def _mod_img(self, image_file: str) -> np.array:
-        rec_img = self.SRGAN.run_sr(image_file)
+        rec_img = self.SRGAN.run_sr_resized(image_file, self.params["zoom"])
         return rec_img
 
 #########################
@@ -797,12 +852,14 @@ class DSModifierFake(DSModifier):
         
         os.makedirs(dst, exist_ok=True)
         
-        print(f'For each image file in <{data_input}>...')
+        print(f'{self.name} For each image file in <{data_input}>...')
         
         for image_file in glob( os.path.join(data_input,'*.'+self.src_ext) ):
             
             imgp = self._mod_img( image_file )
-            cv2.imwrite( os.path.join(dst, os.path.basename(image_file)), imgp )
+            dst_file = os.path.join(dst, os.path.basename(image_file))
+            if not os.path.exists(dst_file):
+                cv2.imwrite( dst_file, imgp )
         
         print('Done.')
         
@@ -1068,17 +1125,19 @@ class SimilarityMetrics( Metric ):
             for k in self.experiment_info.runs
             if self.experiment_info.runs[k]['run_id']==guessed_run_id
         ][0]
-        
-        pred_fn_lst = glob(os.path.join(
-            os.path.dirname(self.data_path),
-            modifier_subfold,
-            '*',f'*.{self.ext}' 
-        ))
+        pred_fn_path = os.path.join(os.path.dirname(self.data_path),modifier_subfold,'*',f'*.{self.ext}')
+        pred_fn_lst = glob(pred_fn_path)
 
         if len(pred_fn_lst)==0:
             print('Error > empty list "pred_fn_lst" ')
-            import pdb; pdb.set_trace()
-
+            modifier_subfold=modifier_subfold.replace("_0","") # for some reason it is written "_0" over the modifier name in some cases of modifier_subfold
+            pred_fn_path = os.path.join(os.path.dirname(self.data_path),modifier_subfold,'*',f'*.{self.ext}')
+            pred_fn_lst = glob(pred_fn_path)
+            if len(pred_fn_lst)==0:
+                print('Error > empty list "pred_fn_lst" ')
+                print(pred_fn_path)
+                import pdb; pdb.set_trace()
+                raise
         if 'LIIF' in pred_fn_lst[0]:
             self._liff_loader_first_time(
                 os.path.join(self.data_path,self.img_dir_gt)

@@ -8,7 +8,6 @@ import torch.backends.cudnn as cudnn
 import torch.optim
 import torch.utils.data
 import torchvision.transforms as transforms
-import torchvision.utils as vutils
 from PIL import Image
 from torchvision.transforms import InterpolationMode
 
@@ -66,5 +65,27 @@ class SRGAN:
             sr = self.model(lr)
         return sr
 
-    def saveimage(self, img, path):
-        vutils.save_image(img, path)
+    def run_sr_resized(self, img_file, scale = 2):
+        print(f"Running SRGAN arch ({self.arch}) over {img_file}")
+        lr = Image.open(img_file)
+        width, height = lr.size
+        pscale = float(1.0 / float(scale))
+        lr = resize_pil_img(lr, int(pscale*width), int(pscale*height))
+        lr = process_image(lr, self.gpu)
+        with torch.no_grad():
+            sr = self.model(lr)
+        return sr
+
+def load_srgan_model(model_fn = "./weights/PSNR.pth", arch = "srgan_2x2"):
+    device = torch.device('cuda')
+    model = models.__dict__[arch]()
+    model.load_state_dict(torch.load(model_fn))
+    model = model.to(device)
+    model.eval()
+    return model
+
+def resize_pil_img(img, target_width, target_height):
+    return img.resize((target_width,target_height), Image.ANTIALIAS)
+def resize_torch_img(img, target_width, target_height):
+    n_channels = img.shape[2]
+    return torch.nn.functional.interpolate(img, size=(target_height, target_width, n_channels), mode='bicubic')
