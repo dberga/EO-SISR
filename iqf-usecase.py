@@ -10,17 +10,17 @@ from typing import Any, Dict, Optional, Union, Tuple, List
 import cv2
 import mlflow
 import numpy as np
-
+# update with "pip install git+https://gitlab+deploy-token-45:FKSA3HpmgUoxa5RZ69Cf@git.satellogic.team/iqf/iqf_tool_box@rebase-before-iquaflow"
 from iq_tool_box.datasets import DSWrapper
 from iq_tool_box.experiments import ExperimentInfo, ExperimentSetup
 from iq_tool_box.experiments.experiment_visual import ExperimentVisual
 from iq_tool_box.experiments.task_execution import PythonScriptTaskExecution
 from iq_tool_box.metrics import RERMetric, SNRMetric
-from iq_tool_box.quality_metrics import RERMetrics, SNRMetrics, GaussianBlurMetrics, NoiseSharpnessMetrics, GSDMetrics
+from iq_tool_box.quality_metrics import ScoreMetrics, RERMetrics, SNRMetrics, GaussianBlurMetrics, NoiseSharpnessMetrics, GSDMetrics
 
 from custom_iqf import DSModifierMSRN, DSModifierFSRCNN,  DSModifierLIIF, DSModifierESRGAN, DSModifierCAR, DSModifierSRGAN, DSModifierFake
 from custom_iqf import SimilarityMetrics
-from visual_comparison import visual_comp, scatter_plots
+from visual_comparison import visual_comp, scatter_plots, plotSNE
 
 def rm_experiment(experiment_name = "SiSR"):
     """Remove previous mlflow records of previous executions of the same experiment"""
@@ -47,6 +47,9 @@ data_root = os.path.dirname(data_path)
 
 #DS wrapper is the class that encapsulate a dataset
 ds_wrapper = DSWrapper(data_path=data_path)
+
+# plot SNE of existing images
+plotSNE(database_name, images_path, (232,232), shm_limit=6e4, True, True, "plots/")
 
 #List of modifications that will be applied to the original dataset:
 
@@ -200,6 +203,7 @@ df.to_csv(f'./{experiment_name}_metrics.csv')
 scatter_plots(df, [['ssim','psnr'],['fid','swd'],['rer_0','snr_mean'],['snr_mean','psnr']], True, "plots/")
 
 print('Calculating Regressor Quality Metrics...') #default configurations
+_ = experiment_info.apply_metric_per_run(ScoreMetrics(), ds_wrapper.json_annotations)
 _ = experiment_info.apply_metric_per_run(RERMetrics(), ds_wrapper.json_annotations)
 _ = experiment_info.apply_metric_per_run(SNRMetrics(), ds_wrapper.json_annotations)
 _ = experiment_info.apply_metric_per_run(GaussianBlurMetrics(), ds_wrapper.json_annotations)
@@ -213,12 +217,13 @@ df = experiment_info.get_df(
             "snr",
             "rer",
             "sharpness",
-            "scale"
+            "scale",
+            "score"
         ]
 )
 print(df)
 df.to_csv(f'./{experiment_name}_regressor.csv')
-scatter_plots(df, [['sigma','rer'],['sharpness','sigma'],['rer','snr'],['sharpness','rer'],['sigma','scale'],['snr','scale']], True, "plots/")
+scatter_plots(df, [['sigma','rer'],['sigma','sharpness'],['rer','snr'],['sharpness','rer'],['sigma','scale'],['snr','scale']], True, "plots/")
 
 print("Comparing Metrics with Regressed Quality Metrics")
 df = experiment_info.get_df(
@@ -237,15 +242,23 @@ df = experiment_info.get_df(
             "rer",
             "snr",
             "sharpness",
-            "scale"
+            "scale",
+            "score"
         ]
 )
 print(df)
 df.to_csv(f'./{experiment_name}.csv')
-scatter_plots(df, [['sigma','rer_0'],['rer','rer_0'],['sharpness','rer_0'],['snr','snr_mean'],['snr','psnr'],['scale','rer'],['scale','snr']], True, "plots/")
+scatter_plots(df, [['sigma','rer_0'],['rer','rer_0'],['sharpness','rer_0'],['snr','snr_mean'],['snr','psnr'],['scale','rer'],['scale','snr'],['score','psnr'],['score','ssim'],['score','swd'],['score','snr_median'],['score','rer_0'],['score','rer_1'],['score','rer_2']], True, "plots/")
 
 ev = ExperimentVisual(df, None)
 
+ev.visualize(
+    plot_kind="bars",
+    xvar="ds_modifier",
+    yvar="score",
+    legend_var='psnr',
+    title=""
+)
 ev.visualize(
     plot_kind="bars",
     xvar="ds_modifier",

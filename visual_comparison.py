@@ -129,7 +129,7 @@ from iq_tool_box.quality_metrics.dataloader import Dataset
 from torch.utils.data import DataLoader
 from sklearn.manifold import TSNE
 
-def plotSNE(dataset_name="test-ds", images_folder="./Data/test-ds/test/", img_size=(232,232), savefig = False,plots_folder = "plots/"):
+def plotSNE(dataset_name="test-ds", images_folder="./Data/test-ds/test/", img_size=(232,232),shm_limit=1e4, crop = True, savefig = False,plots_folder = "plots/"):
     # create data loader
     dataset = Dataset(
         "whole", # split
@@ -140,10 +140,17 @@ def plotSNE(dataset_name="test-ds", images_folder="./Data/test-ds/test/", img_si
         split_percent = 1.0,
         img_size = img_size,
     )
-    dataset.__crop__(True) # only if images are of distinct size
+    if crop is True:
+        dataset.__crop__(False) # only if images are of distinct size
+
+    # set maximum batch size according to shared memory available
+    max_batch_size = int(shm_limit/np.mean(img_size))
+    if max_batch_size > dataset.__len__():
+        max_batch_size = dataset.__len__()
+
     dataloader= DataLoader(
         dataset=dataset,
-        batch_size=dataset.__len__(), # one batch only
+        batch_size=max_batch_size,  
         shuffle=True,
         num_workers=1,
         pin_memory=True,
@@ -151,57 +158,59 @@ def plotSNE(dataset_name="test-ds", images_folder="./Data/test-ds/test/", img_si
 
     # get one tensor/array of all images
     xbatches=[x for bix,(filename, param, x, y) in enumerate(dataloader)]
-    x_data=xbatches[0] # one batch only
+    for batch_idx,x_data in enumerate(xbatches):
+        # reshape each image array to 1 dimension
+        if len(x_data.shape)>=4: # RGB
+            x_data = np.reshape(x_data, [x_data.shape[0], x_data.shape[1]*x_data.shape[2]*x_data.shape[3]])
+        else: # GRAY
+            x_data = np.reshape(x_data, [x_data.shape[0], x_data.shape[1]*x_data.shape[2]])
 
-    # reshape each image array to 1 dimension
-    if len(x_data.shape)>=4: # RGB
-        x_data = np.reshape(x_data, [x_data.shape[0], x_data.shape[1]*x_data.shape[2]*x_data.shape[3]])
-    else: # GRAY
-        x_data = np.reshape(x_data, [x_data.shape[0], x_data.shape[1]*x_data.shape[2]])
+        # calculate TSNE
+        tsne = TSNE(n_components=2, verbose=1, random_state=123)
+        z = tsne.fit_transform(x_data)
+        tx = z[:, 0]
+        ty = z[:, 1]
+        tx = (tx-np.min(tx)) / (np.max(tx) - np.min(tx))
+        ty = (ty-np.min(ty)) / (np.max(ty) - np.min(ty))
 
-    # calculate TSNE
-    tsne = TSNE(n_components=2, verbose=1, random_state=123)
-    z = tsne.fit_transform(x_data)
-    tx = z[:, 0]
-    ty = z[:, 1]
-    tx = (tx-np.min(tx)) / (np.max(tx) - np.min(tx))
-    ty = (ty-np.min(ty)) / (np.max(ty) - np.min(ty))
+        '''
+        # Create simple 2d tSNE scatter plot
+        fig = plt.scatter(tx,ty)
+        plt.xlabel("tx")
+        plt.ylabel("ty")
+        plt.title("batch "+str(batch_idx))
+        if savefig is True:
+            plt.savefig(os.path.join(plots_folder,"tSNE"+"_"+str(batch_idx)+"_"+dataset_name+".png"))
+        else:
+            plt.show()
+        plt.clf()
+        '''
+        # Create 2d tSNE scatter plot with visualization of images
 
-    # Create 2d tSNE scatter plot
-    fig = plt.scatter(tx,ty)
-    plt.xlabel("tx")
-    plt.xlabel("ty")
-    if savefig is True:
-        plt.savefig(os.path.join(plots_folder,"tSNE"+"_"+dataset_name+".png"))
-    else:
-        plt.show()
-    plt.clf()
+        width = 4000
+        height = 3000
+        max_dim = 200
 
-    # Create 2d tSNE scatter plot with visualization of images
+        # get images paths
+        images = os.listdir(images_folder)
+        for idx,img_name in enumerate(images):
+            images[idx] = os.path.join(images_folder,img_name)
 
-    width = 4000
-    height = 3000
-    max_dim = 100
+        # create full scatter plot
+        full_image = pil_image.new('RGBA', (width, height))
+        for img, x, y in zip(images, tx, ty):
+            tile = pil_image.open(img)
+            rs = max(1, tile.width/max_dim, tile.height/max_dim)
+            tile = tile.resize((int(tile.width/rs), int(tile.height/rs)), pil_image.ANTIALIAS)
+            full_image.paste(tile, (int((width-max_dim)*x), int((height-max_dim)*y)), mask=tile.convert('RGBA'))
 
-    # get images paths
-    images = os.listdir(images_folder)
-    for idx,img_name in enumerate(images):
-        images[idx] = os.path.join(images_folder,img_name)
-
-    # create full scatter plot
-    full_image = pil_image.new('RGBA', (width, height))
-    for img, x, y in zip(images, tx, ty):
-        tile = pil_image.open(img)
-        rs = max(1, tile.width/max_dim, tile.height/max_dim)
-        tile = tile.resize((int(tile.width/rs), int(tile.height/rs)), pil_image.ANTIALIAS)
-        full_image.paste(tile, (int((width-max_dim)*x), int((height-max_dim)*y)), mask=tile.convert('RGBA'))
-
-    plt.figure(figsize = (16,12))
-    plt.imshow(full_image)
-    plt.xlabel("tx")
-    plt.xlabel("ty")
-    if savefig is True:
-        plt.savefig(os.path.join(plots_folder,"visual_tSNE"+"_"+dataset_name+".png"))
-    else:
-        plt.show()
-    plt.clf()
+        plt.figure(figsize = (16,12))
+        plt.imshow(full_image)
+        plt.xlabel("tx")
+        plt.ylabel("ty")
+        plt.title("batch "+str(batch_idx))
+        if savefig is True:
+            plt.savefig(os.path.join(plots_folder,"visual_tSNE"+"_"+str(batch_idx)+"_"+dataset_name+".png"))
+        else:
+            plt.show()
+        plt.clf()
