@@ -14,19 +14,22 @@ from models.esrgan import RRDBNet_arch as arch
 from lowresgen import LRSimulator
 # from custom_iqf import ModelConfS3Loader
 
-def generate_lowres(image_file,scale=3):
+def generate_lowres(image_file,scale=3, blur=False, resize=True):
     """
     """
     image = pil_image.open(image_file).convert('RGB')
     
     # AFEGIT PER FER EL BLUR
-    img_tensor = transforms.ToTensor()(image).unsqueeze_(0)
-    sigma = 0.5 * scale
-    kernel_size = math.ceil(sigma * 3 + 4)
-    kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
-    image_blur = kornia.filters.filter2d(img_tensor, kernel_tensor[None])
-    image = transforms.ToPILImage()(image_blur.squeeze_(0))
-    image = image.resize((int(image.width // scale), int(image.height // scale)), resample=pil_image.BICUBIC)
+    if blur is True:
+        img_tensor = transforms.ToTensor()(image).unsqueeze_(0)
+        sigma = 0.5 * scale
+        kernel_size = math.ceil(sigma * 3 + 4)
+        kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
+        image_blur = kornia.filters.filter2d(img_tensor, kernel_tensor[None])
+        image = transforms.ToPILImage()(image_blur.squeeze_(0))
+    
+    if resize is True:
+        image = image.resize((int(image.width // scale), int(image.height // scale)), resample=pil_image.BICUBIC)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         fn = os.path.join(tmpdir,'image.tif')

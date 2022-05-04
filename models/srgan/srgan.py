@@ -17,6 +17,14 @@ from .srgan_pytorch.utils.common import create_folder
 from .srgan_pytorch.utils.estimate import iqa
 from .srgan_pytorch.utils.transform import process_image
 
+def blur_image(image, scale):
+    img_tensor = transforms.ToTensor()(image).unsqueeze_(0)
+    sigma = 0.5 * scale
+    kernel_size = math.ceil(sigma * 3 + 4)
+    kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
+    image_blur = kornia.filters.filter2d(img_tensor, kernel_tensor[None])
+    image = transforms.ToPILImage()(image_blur.squeeze_(0))
+    return image
 
 class SRGAN:
     def __init__(
@@ -57,10 +65,27 @@ class SRGAN:
 
         cudnn.benchmark = True
     
+    def run_sr_mod(self, img_file, scale = None, blur = False):
+        print(f"Running SRGAN arch ({self.arch}) over {img_file}")
+        lr = Image.open(img_file)
+        if scale is not None:
+            width, height = lr.size
+            pscale = float(1.0 / float(scale))
+            lr = resize_pil_img(lr, int(pscale*width), int(pscale*height))
+        if blur is True:
+            if scale is None:
+                lr = blur_image(lr, 2)
+            else:
+                lr = blur_image(lr, scale)
+        lr = process_image(lr, self.gpu) # convert to pytorch tensor
+        with torch.no_grad():
+            sr = self.model(lr)
+        return sr
+
     def run_sr(self, img_file):
         print(f"Running SRGAN arch ({self.arch}) over {img_file}")
         lr = Image.open(img_file)
-        lr = process_image(lr, self.gpu)
+        lr = process_image(lr, self.gpu) # convert to pytorch tensor
         with torch.no_grad():
             sr = self.model(lr)
         return sr
@@ -71,7 +96,7 @@ class SRGAN:
         width, height = lr.size
         pscale = float(1.0 / float(scale))
         lr = resize_pil_img(lr, int(pscale*width), int(pscale*height))
-        lr = process_image(lr, self.gpu)
+        lr = process_image(lr, self.gpu) # convert to pytorch tensor
         with torch.no_grad():
             sr = self.model(lr)
         return sr

@@ -81,8 +81,9 @@ class SRImplicitPaired(Dataset):
         }
 
 def resize_fn(img, size):
+    interpolation = transforms.InterpolationMode("bicubic") # Image.BICUBIC
     return transforms.ToTensor()(
-        transforms.Resize(size, Image.BICUBIC)(
+        transforms.Resize(size, interpolation)(
             transforms.ToPILImage()(img)))
 
 
@@ -90,7 +91,7 @@ def resize_fn(img, size):
 class SRImplicitDownsampled(Dataset):
 
     def __init__(self, dataset, inp_size=None, scale_min=1, scale_max=None,
-                 augment=False, sample_q=None):
+                 augment=False, sample_q=None, blur=False, resize=False):
         self.dataset = dataset
         print(self.dataset)
         self.inp_size = inp_size
@@ -100,6 +101,8 @@ class SRImplicitDownsampled(Dataset):
         self.scale_max = scale_max
         self.augment = augment
         self.sample_q = sample_q
+        self.blur = blur
+        self.resize_fn = resize
         self.count = 0
 
     def __len__(self):
@@ -113,30 +116,36 @@ class SRImplicitDownsampled(Dataset):
         crop_size = (img.shape[1], img.shape[2])
         random_crop = kornia.augmentation.RandomCrop(crop_size, )
         crop_hr_Bdim = random_crop(img)
-        sigma = 0.5 * s
-        kernel_size = int(sigma * 3 + 4)
-        if kernel_size == 6:
-            kernel_size = 7
-        elif kernel_size == 8:
-            kernel_size = 9
-        elif kernel_size == 10:
-            kernel_size = 11
-        kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
-        blurred = kornia.filters.filter2d(crop_hr_Bdim, kernel_tensor[None])
+        if self.blur == True:
+            sigma = 0.5 * s
+            kernel_size = int(sigma * 3 + 4)
+            if kernel_size == 6:
+                kernel_size = 7
+            elif kernel_size == 8:
+                kernel_size = 9
+            elif kernel_size == 10:
+                kernel_size = 11
+            kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
+            blurred = kornia.filters.filter2d(crop_hr_Bdim, kernel_tensor[None])
+            crop = blurred
+        else:
+            crop = crop_hr_Bdim   
         #######
-
         if self.inp_size is None:
             h_lr = math.floor(img.shape[-2] / s + 1e-9)
             w_lr = math.floor(img.shape[-1] / s + 1e-9)
-            img = blurred[0][:, :round(h_lr * s), :round(w_lr * s)] # assume round int
-            img_down = resize_fn(img, (h_lr, w_lr))
+            img = crop[0][:, :round(h_lr * s), :round(w_lr * s)] #blurred[0][:, :round(h_lr * s), :round(w_lr * s)] # assume round int
+            if self.resize_fn is False:
+                img_down = img.clone()
+            else:
+                img_down = resize_fn(img, (h_lr, w_lr))
             crop_lr, crop_hr = img_down, img
         else:
             w_lr = self.inp_size
             w_hr = round(w_lr * s)
             x0 = random.randint(0, img.shape[-2] - w_hr)
             y0 = random.randint(0, img.shape[-1] - w_hr)
-            crop_hr = blurred[0][:, x0: x0 + w_hr, y0: y0 + w_hr]
+            crop_hr = crop[0][:, x0: x0 + w_hr, y0: y0 + w_hr] #blurred[0][:, x0: x0 + w_hr, y0: y0 + w_hr]
             crop_lr = resize_fn(crop_hr, w_lr)  # abans era crop_lr = resize_fn(crop_hr, w_lr)
 
         '''save_folder = 'LIIF_1m05'

@@ -68,13 +68,15 @@ def scatter_plots(df,
 def visual_comp(
     lst_folders = [
     "./Data/test-ds/test/",
+    "./Data/test-ds#GT(LR)/test/",
     "./Data/test-ds#sisr+MSRN_MSRN_nonoise-MSRN_1to033-model_epoch_1500/test/",
     "./Data/test-ds#sisr+ESRGAN_ESRGAN_1to033_x3_blur-net_g_latest/test/",
     "./Data/test-ds#sisr+FSRCNN_test_scale3_FSRCNN_1to033_x3_blur-best/test/",
     "./Data/test-ds#sisr+LIIF_LIIF_config_test_liif_LIIF_blur-epoch-best/test/"
     ], 
     lst_labels = [
-    "GT",
+    "GT_HR",
+    "GT_LR",
     "MSRN",
     "ESRGAN",
     "FSRCNN",
@@ -85,7 +87,7 @@ def visual_comp(
     ):
     lst_lst = [glob(fr"{os.path.join(folder,'*')}") for folder in lst_folders]
     print(''.join([label+'\t\t' for label in lst_labels]))
-    
+
     for enu,fn in enumerate(lst_lst[0]):
         if enu>20:
             break
@@ -114,7 +116,6 @@ def visual_comp(
             plt.savefig(os.path.join(comparison_folder,os.path.basename(fn)))
         else:
             plt.show()
-
         fig,ax = plt.subplots(1, n_alg ,figsize=(20,7), gridspec_kw={'wspace':0, 'hspace':0},squeeze=True)
         for i in range( n_alg ):
             ax[i].imshow( arr_lst[i][75:-75:,75:-75:,:])
@@ -129,7 +130,7 @@ from iq_tool_box.quality_metrics.dataloader import Dataset
 from torch.utils.data import DataLoader
 from sklearn.manifold import TSNE
 
-def plotSNE(dataset_name="test-ds", images_folder="./Data/test-ds/test/", img_size=(232,232),shm_limit=1e4, crop = True, savefig = False,plots_folder = "plots/"):
+def plotSNE(dataset_name="test-ds", images_folder="./Data/test-ds/test/", img_size=(232,232),shm_limit=6e4, crop = True, savefig = False,plots_folder = "plots/"):
     # create data loader
     dataset = Dataset(
         "whole", # split
@@ -189,7 +190,7 @@ def plotSNE(dataset_name="test-ds", images_folder="./Data/test-ds/test/", img_si
 
         width = 4000
         height = 3000
-        max_dim = 200
+        max_dim = 300
 
         # get images paths
         images = os.listdir(images_folder)

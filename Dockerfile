@@ -49,6 +49,7 @@ RUN pip install kornia==0.6.4 --no-deps
 #RUN pip install torch==1.7.1+cu110 torchvision==0.8.2+cu110 -f https://download.pytorch.org/whl/torch_stable.html
 RUN pip install torch==1.9.1+cu111 torchvision==0.10.1+cu111 -f https://download.pytorch.org/whl/torch_stable.html
 
+#RUN apt-get install pandoc texlive-xetex texlive-fonts-recommended texlive-plain-generic # to latex-export pdf from jupyter
 #ENTRYPOINT [ "/bin/bash", "-l", "-c" ]
 CMD ["/bin/bash", "-c", "/bin/bash && tail -f /dev/null"]
 

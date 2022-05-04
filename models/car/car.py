@@ -10,6 +10,15 @@ from .EDSR.edsr import EDSR
 from .modules import DSN
 #from .adaptive_gridsampler.gridsampler import Downsampler
 
+def blur_image(image, scale):
+    img_tensor = transforms.ToTensor()(image).unsqueeze_(0)
+    sigma = 0.5 * scale
+    kernel_size = math.ceil(sigma * 3 + 4)
+    kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
+    image_blur = kornia.filters.filter2d(img_tensor, kernel_tensor[None])
+    image = transforms.ToPILImage()(image_blur.squeeze_(0))
+    return image
+
 class CAR:
     def __init__(
         self,
@@ -44,6 +53,17 @@ class CAR:
         self.kernel_generation_net.eval()
         #self.downsampler_net.eval()
         self.upscale_net.eval()
+    
+    def run_upscale_mod(self, img_file, scale = None, blur = False):
+        print(f"Running CAR upscale network over {img_file}")
+        if scale is not None:
+            img = load_img_resized(img_file, scale)
+        else:
+            img = load_img(img_file)
+        if blur is True:
+            img = blur_image(img, scale)
+        reconstructed_img = self.upscale_net(img)
+        return reconstructed_img
 
     def run_upscale(self, img_file):
         print(f"Running CAR upscale network over {img_file}")

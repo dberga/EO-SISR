@@ -134,16 +134,17 @@ class noiseLayer_normal(nn.Module):
         return x
 
 class WindowsDataset_SR(data.Dataset):
-    def __init__(self, nimg, wind_size=512, stride=480, scale=2):
-        
-        x_in = kornia.image_to_tensor(nimg).float()
-        x_in = torch.unsqueeze(x_in, 0)
-        sigma = 0.5 * scale
-        kernel_size = math.ceil(sigma * 3 + 4)
-        kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
-        x_in = kornia.filters.filter2d(x_in, kernel_tensor[None])[0]
-        x_in = kornia.geometry.rescale(x_in, 1 / scale, 'bicubic')
-        nimg = kornia.tensor_to_image(torch.squeeze(x_in))
+    def __init__(self, nimg, wind_size=512, stride=480, scale=2, blur=False):
+
+        if blur is True:
+            x_in = kornia.image_to_tensor(nimg).float()
+            x_in = torch.unsqueeze(x_in, 0)
+            sigma = 0.5 * scale
+            kernel_size = math.ceil(sigma * 3 + 4)
+            kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
+            x_in = kornia.filters.filter2d(x_in, kernel_tensor[None])[0]
+            x_in = kornia.geometry.rescale(x_in, 1 / scale, 'bicubic')
+            nimg = kornia.tensor_to_image(torch.squeeze(x_in))
         
         self.nimg = nimg
 
@@ -195,7 +196,7 @@ class WindowsDataset_SR(data.Dataset):
 
 
 def inference_model(model, nimg, wind_size=512, stride=480, scale=2, 
-                    batch_size=1, data_parallel=False, padding=5, manager=None, add_noise=None):
+                    batch_size=1, data_parallel=False, padding=5, manager=None, add_noise=None, blur=False):
     """
     Run sliding window on data using the sisr model.
     
@@ -221,7 +222,7 @@ def inference_model(model, nimg, wind_size=512, stride=480, scale=2,
     H,W,C=nimg.shape
     
     # init dataset 
-    dataset = WindowsDataset_SR(nimg, wind_size, stride, scale)
+    dataset = WindowsDataset_SR(nimg, wind_size, stride, scale, blur)
     
     # dataloader
     dataloader = torch.utils.data.DataLoader(dataset, batch_size)
@@ -241,7 +242,7 @@ def inference_model(model, nimg, wind_size=512, stride=480, scale=2,
         else:
             x_in = sample['x_in'].cuda()
         
-        if add_noise is not None:
+        if add_noise is not None and add_noise is not False:
             add_noise_layer = noiseLayer_normal(add_noise, mean=0, std=0.2)
             x_in = add_noise_layer(x_in)
         # add 5 pixel padding to avoid border effect
@@ -316,7 +317,7 @@ def load_msrn_model(weights_path=None, cuda='0',n_scale=3):
 def process_file_msrn(
     nimg, model, compress=True, out_win=256,
     wind_size=512, stride=480, batch_size=1,
-    scale=2, padding=5, manager=None
+    scale=2, padding=5, manager=None, add_noise = None, blur=False
 ):
     
     # nimg = inria image at 0.3
@@ -340,18 +341,19 @@ def process_file_msrn(
         model, nimg,
         wind_size=wind_size, stride=stride,
         scale=scale, batch_size=batch_size,
-        manager=manager, add_noise=None
+        manager=manager, add_noise=add_noise, blur=blur
     ) # you can add noise during inference to get smoother results (try from 0.1 to 0.3; the higher the smoother effect!) 
 
     result = result[2*padding:-2*padding,2*padding:-2*padding]
     result = cv2.convertScaleAbs(result, alpha=np.iinfo(np.uint8).max)
-    result = result.astype(np.uint8)
     
     #sfactor = int(10* (1/(scale*res_output))) / 10 # round up to 2nd decimal
     #H,W = result.shape[:2]
     #H_t, W_t = int(H*sfactor), int(W*sfactor)
     if result.shape[-2]!=out_win:
         result = cv2.resize(result, (out_win,out_win), cv2.INTER_AREA)
+    
+    result = result.astype(np.uint8)
 
     return result
 
