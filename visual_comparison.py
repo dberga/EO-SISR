@@ -86,7 +86,7 @@ def visual_comp(
     comparison_folder = "comparison/",
     ):
     lst_lst = [glob(fr"{os.path.join(folder,'*')}") for folder in lst_folders]
-    print(''.join([label+'\t\t' for label in lst_labels]))
+    print(''.join([label+'\t     ' for label in lst_labels]))
 
     for enu,fn in enumerate(lst_lst[0]):
         if enu>20:

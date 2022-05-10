@@ -315,11 +315,13 @@ class DSModifierLIIF(DSModifier):
     ):
         params['algo'] = 'LIIF'
         algo           = params['algo']
-        
-        subname = algo + '_' + \
-                    os.path.splitext(params['config0'])[0]+ \
-                    '_' + os.path.splitext(params['config1'])[0]+ \
-                    '_'+os.path.splitext(params['model'])[0].replace('/','-')
+        print(params['config0'])
+        print(params['config1'])
+        print(params['model'])
+
+        subname = algo + '_'+os.path.splitext(params['model'])[0].replace('/','-')
+                    #'_' + os.path.splitext(params['config0'])[0]+ \
+                    #'_' + os.path.splitext(params['config1'])[0]+ \
         
         self.name = f"sisr+{subname}"
         
@@ -339,16 +341,33 @@ class DSModifierLIIF(DSModifier):
         self.spec   =  model_conf.spec
         self.args   =  args
         self.model  =  model
+        if "zoom" in self.params.keys():
+            self.zoom           = params['zoom']
+            self.name += f"_x{params['zoom']}"
+            self.params.update({"modifier": "{}".format(self._get_name())})
+        else:
+            self.zoom = None
         if "blur" in self.params.keys():
             self.blur           = params['blur']
+            if self.blur is True:
+                self.name += "_blur"
+                self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.blur = False
         if "resize_preprocess" in self.params.keys():
             self.resize_preprocess = self.params["resize_preprocess"]
+            if self.resize_preprocess is True:
+                self.name += "_rpre"
+                self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.resize_preprocess = True
+            self.name += "_rpre"
+            self.params.update({"modifier": "{}".format(self._get_name())})
         if "resize_postprocess" in self.params.keys():
             self.resize_postprocess = self.params["resize_postprocess"]
+            if self.resize_postprocess is True:
+                self.name += "_rpost"
+                self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.resize_postprocess = False
         
@@ -486,22 +505,39 @@ class DSModifierFSRCNN(DSModifier):
         params['algo'] = 'FSRCNN'
         algo           = params['algo']
         
-        subname = algo + '_' + os.path.splitext(params['config'])[0]+'_'+os.path.splitext(params['model'])[0].replace('/','-')
+        subname = algo + '_' + os.path.splitext(params['model'])[0].replace('/','-') # os.path.splitext(params['config'])[0]+'_'+
         self.name = f"sisr+{subname}"
         
         self.params: Dict[str, Any] = params
         self.ds_modifier = ds_modifier
         self.params.update({"modifier": "{}".format(self._get_name())})
+        if "zoom" in self.params.keys():
+            self.zoom           = params['zoom']
+            self.name += f"_x{params['zoom']}"
+            self.params.update({"modifier": "{}".format(self._get_name())})
+        else:
+            self.zoom = None
         if "blur" in self.params.keys():
             self.blur           = params['blur']
+            if self.blur is True:
+                self.name += "_blur"
+                self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.blur = False
         if "resize_preprocess" in self.params.keys():
             self.resize_preprocess = self.params["resize_preprocess"]
+            if self.resize_preprocess is True:
+                self.name += "_rpre"
+                self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.resize_preprocess = True
+            self.name += "_rpre"
+            self.params.update({"modifier": "{}".format(self._get_name())})
         if "resize_postprocess" in self.params.keys():
             self.resize_postprocess = self.params["resize_postprocess"]
+            if self.resize_postprocess is True:
+                self.name += "_rpost"
+                self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.resize_postprocess = False
         model_conf = ModelConfS3Loader(
