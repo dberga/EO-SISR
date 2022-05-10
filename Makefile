@@ -14,7 +14,7 @@ ifndef MLF_PORT
 endif
 
 ifndef SHM_SIZE
-	SHM_SIZE="2gb"
+	SHM_SIZE="8g"
 endif
 
 PROJ_NAME=sisr
@@ -40,8 +40,8 @@ setup:
 dockershell:
 	docker run --rm --name $(CONTAINER_NAME) --gpus all -p 9198:9198 \
 	-v $(shell pwd):/sisr -v $(DS_VOLUME):/scratch -v \
-	-it sisr
-	#--shm-size=${SHM_SIZE} \
+	-it sisr \
+	--shm-size ${SHM_SIZE}
 
 notebookshell:
 	docker run --gpus all --privileged -itd --name $(CONTAINER_NAME)-nb \
@@ -53,8 +53,8 @@ notebookshell:
 	--no-browser \
 	--ip=0.0.0.0 \
 	--allow-root \
-	--port=${NB_PORT}
-	#--shm-size=${SHM_SIZE} \
+	--port=${NB_PORT} \
+	--shm-size ${SHM_SIZE}
 
 mlflow:
 	docker run --privileged -itd --rm --name $(CONTAINER_NAME)-mlf \

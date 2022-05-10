@@ -10,13 +10,23 @@ from .EDSR.edsr import EDSR
 from .modules import DSN
 #from .adaptive_gridsampler.gridsampler import Downsampler
 
+import numpy as np
+import kornia
+import torchvision.transforms as transforms
 def blur_image(image, scale):
-    img_tensor = transforms.ToTensor()(image).unsqueeze_(0)
-    sigma = 0.5 * scale
-    kernel_size = math.ceil(sigma * 3 + 4)
-    kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
+    img_type = type(image).__name__
+    if "Tensor" not in img_type:
+        img_tensor = transforms.ToTensor()(image).unsqueeze_(0)
+    else:
+        img_tensor = image
+    sigma = 0.5 * scale if scale is not None else 7.0
+    kernel_size = int(np.ceil(sigma * 3 + 4))
+    kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))   
     image_blur = kornia.filters.filter2d(img_tensor, kernel_tensor[None])
-    image = transforms.ToPILImage()(image_blur.squeeze_(0))
+    if "Tensor" not in img_type:
+        image = transforms.ToPILImage()(image_blur.squeeze_(0))
+    else:
+        image = image_blur
     return image
 
 class CAR:
@@ -54,19 +64,20 @@ class CAR:
         #self.downsampler_net.eval()
         self.upscale_net.eval()
     
-    def run_upscale_mod(self, img_file, scale = None, blur = False):
-        print(f"Running CAR upscale network over {img_file}")
+    def run_upscale_mod(self, img_file, scale = None, zoom = None, blur = False):
         if scale is not None:
             img = load_img_resized(img_file, scale)
         else:
             img = load_img(img_file)
         if blur is True:
-            img = blur_image(img, scale)
+            if scale is None:
+                img = blur_image(img, zoom)
+            else:
+                img = blur_image(img, scale)
         reconstructed_img = self.upscale_net(img)
         return reconstructed_img
 
     def run_upscale(self, img_file):
-        print(f"Running CAR upscale network over {img_file}")
         img = load_img(img_file)
         reconstructed_img = self.upscale_net(img)
         return reconstructed_img
@@ -79,7 +90,6 @@ class CAR:
         return downscaled_img
     '''
     def run_upscale_resized(self, img_file, scale = 2):
-        print(f"Running CAR upscale network over {img_file}")
         img = load_img_resized(img_file, scale)
         reconstructed_img = self.upscale_net(img)
         return reconstructed_img

@@ -62,7 +62,7 @@ def blur_image(image, scale):
     if init_type == "ndarray":
         image = pil_image.fromarray(image)
     img_tensor = transforms.ToTensor()(image).unsqueeze_(0)
-    sigma = 0.5 * scale
+    sigma = 0.5 * scale if scale is not None else 7.0
     kernel_size = math.ceil(sigma * 3 + 4)
     kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
     image_blur = kornia.filters.filter2d(img_tensor, kernel_tensor[None])
@@ -70,21 +70,25 @@ def blur_image(image, scale):
     if init_type == "ndarray":
         image = np.array(image)
     return image
-def rescale_image(image, scale):
+def rescale_image(image, scale, interpolation=pil_image.BICUBIC):
+    if scale is None or scale == 1.0:
+        return image
     if type(image).__name__ == "ndarray":
         image = pil_image.fromarray(image)
-        image = image.resize((image.width // scale, image.height // scale), resample=pil_image.BICUBIC)
+        image = image.resize((image.width // scale, image.height // scale), resample=interpolation)
         image = np.array(image)
     else:
-        image = image.resize((image.width // scale, image.height // scale), resample=pil_image.BICUBIC)
+        image = image.resize((image.width // scale, image.height // scale), resample=interpolation)
     return image
-def rescale_image_exact(image, width, height):
+def rescale_image_exact(image, width, height, interpolation=pil_image.BICUBIC):
+    if scale is None or scale == 1.0:
+        return image
     if type(image).__name__ == "ndarray":
         image = pil_image.fromarray(image)
-        image = image.resize((width, height), resample=pil_image.BICUBIC)
+        image = image.resize((width, height), resample=interpolation)
         image = np.array(image)
     else:
-        image = image.resize((width, height), resample=pil_image.BICUBIC)
+        image = image.resize((width, height), resample=interpolation)
     return image
 
 ###### MODEL READOUT
@@ -122,7 +126,7 @@ class ModelConfS3Loader():
         self.config_fn_lst      =  config_fn_lst
         self.bucket_name        =  bucket_name
         self.algo               =  algo
-        self.zoom               =  3
+        self.zoom               =  zoom
         self.tmpdir             = tmpdir
         self.kwargs             = kwargs
         
@@ -363,7 +367,7 @@ class DSModifierLIIF(DSModifier):
         dst = os.path.join(mod_path, input_name)
         os.makedirs(dst, exist_ok=True)
         
-        print(f'[LIIF] For each image file in <{data_input}>...')
+        print(f'{self.name} For each image file in <{data_input}>...')
         
         data_norm, eval_type, eval_bsize = None,None, None
         
@@ -420,7 +424,7 @@ class DSModifierLIIF(DSModifier):
             orig_w, orig_h = pil_image.open(image_file).size
             try:
                 imgp = self._mod_img( batch, inp_sub, inp_div, eval_bsize,gt_div , gt_sub )
-                print(imgp.shape)
+                print(f"Running {self.name} over {os.path.basename(image_file)}")
                 output = pil_image.fromarray((imgp*255).astype(np.uint8))
                 if self.resize_postprocess is True:
                     rec_img = rescale_image_exact(output, orig_w, orig_h)
@@ -527,13 +531,13 @@ class DSModifierFSRCNN(DSModifier):
         dst = os.path.join(mod_path, input_name)
         os.makedirs(dst, exist_ok=True)
         
-        print(f'[FSRCNN] For each image file in <{data_input}>...')
+        print(f'{self.name} For each image file in <{data_input}>...')
         
         for image_file in glob( os.path.join(data_input,'*.tif') ):
 
             try:
                 imgp = self._mod_img( image_file )
-                print( imgp.shape )
+                print(f"Running {self.name} over {os.path.basename(image_file)}")
                 output = pil_image.fromarray(imgp)
                 output.save(os.path.join(dst, os.path.basename(image_file)))
                 #cv2.imwrite( os.path.join(dst, os.path.basename(image_file)), imgp )
@@ -595,7 +599,7 @@ class DSModifierMSRN(DSModifier):
         ds_modifier: Optional[DSModifier] = None,
         params: Dict[str, Any] = {
             "algo":"MSRN",
-            "zoom": 3,
+            "zoom": 2,
             "model": "MSRN/SISR_MSRN_X2_BICUBIC.pth",
             "compress": False,
             "add_noise": False,
@@ -615,22 +619,45 @@ class DSModifierMSRN(DSModifier):
         self.params.update({"modifier": "{}".format(self._get_name())})
         if "compress" in self.params.keys():
             self.compress = self.params["compress"]
+            if self.compress is True:
+                self.name += "_compress"
+                self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.compress = False
         if "add_noise" in self.params.keys():
             self.add_noise = self.params["add_noise"]
+            if self.add_noise is True:
+                self.name += "_addnoise"
+                self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.add_noise = None
+        if "zoom" in self.params.keys():
+            self.zoom           = params['zoom']
+            self.name += f"_x{params['zoom']}"
+            self.params.update({"modifier": "{}".format(self._get_name())})
+        else:
+            self.zoom = None
         if "blur" in self.params.keys():
-            self.blur = self.params["blur"]
+            self.blur           = params['blur']
+            if self.blur is True:
+                self.name += "_blur"
+                self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.blur = False
         if "resize_preprocess" in self.params.keys():
             self.resize_preprocess = self.params["resize_preprocess"]
+            if self.resize_preprocess is True:
+                self.name += "_rpre"
+                self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.resize_preprocess = True
+            self.name += "_rpre"
+            self.params.update({"modifier": "{}".format(self._get_name())})
         if "resize_postprocess" in self.params.keys():
             self.resize_postprocess = self.params["resize_postprocess"]
+            if self.resize_postprocess is True:
+                self.name += "_rpost"
+                self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.resize_postprocess = False
         model_conf = ModelConfS3Loader(
@@ -657,7 +684,7 @@ class DSModifierMSRN(DSModifier):
         dst = os.path.join(mod_path, input_name)
         os.makedirs(dst, exist_ok=True)
         
-        print(f'[MSRN] For each image file in <{data_input}>...')
+        print(f'{self.name} For each image file in <{data_input}>...')
         
         for image_file in glob( os.path.join(data_input,'*.tif') ):
             
@@ -666,7 +693,7 @@ class DSModifierMSRN(DSModifier):
             
             try:
                 imgp = self._mod_img( image_file )
-                print( imgp.shape )
+                print(f"Running {self.name} over {os.path.basename(image_file)}")
                 cv2.imwrite( os.path.join(dst, os.path.basename(image_file)), imgp )
             except TimeOutException as ex:
                 print(ex)
@@ -706,7 +733,7 @@ class DSModifierMSRN(DSModifier):
             blur=self.blur, #True
         )
         if self.resize_postprocess is True:
-            rec_img = rescale_image_exact(output, orig_w, orig_h)
+            rec_img = rescale_image_exact(rec_img, orig_w, orig_h)
         return rec_img
 
 
@@ -727,7 +754,7 @@ class DSModifierESRGAN(DSModifier):
         ds_modifier: Optional[DSModifier] = None,
         params: Dict[str, Any] = {
             "algo":"ESRGAN",
-            "zoom": 3,
+            "zoom": 2,
             "model": "./ESRGAN_1to033_x3_blur/net_g_latest.pth",
             "blur": False,
             "resize_preprocess": True,
@@ -744,18 +771,36 @@ class DSModifierESRGAN(DSModifier):
         self.device                 = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
         self.params.update({"modifier": "{}".format(self._get_name())})
+        if "zoom" in self.params.keys():
+            self.zoom           = params['zoom']
+            self.name += f"_x{params['zoom']}"
+            self.params.update({"modifier": "{}".format(self._get_name())})
+        else:
+            self.zoom = None
         if "blur" in self.params.keys():
-            self.blur = self.params["blur"]
+            self.blur           = params['blur']
+            if self.blur is True:
+                self.name += "_blur"
+                self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.blur = False
         if "resize_preprocess" in self.params.keys():
             self.resize_preprocess = self.params["resize_preprocess"]
+            if self.resize_preprocess is True:
+                self.name += "_rpre"
+                self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.resize_preprocess = True
+            self.name += "_rpre"
+            self.params.update({"modifier": "{}".format(self._get_name())})
         if "resize_postprocess" in self.params.keys():
             self.resize_postprocess = self.params["resize_postprocess"]
+            if self.resize_postprocess is True:
+                self.name += "_rpost"
+                self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.resize_postprocess = False
+
         model_conf = ModelConfS3Loader(
             model_fn      = params['model'],
             config_fn_lst = [],
@@ -779,12 +824,12 @@ class DSModifierESRGAN(DSModifier):
         dst = os.path.join(mod_path, input_name)
         os.makedirs(dst, exist_ok=True)
         
-        print(f'[ESRGAN] For each image file in <{data_input}>...')
+        print(f'{self.name} For each image file in <{data_input}>...')
         
         for image_file in glob( os.path.join(data_input,'*.tif') ):
             
             imgp = self._mod_img( image_file )
-            print( imgp.shape )
+            print(f"Running {self.name} over {os.path.basename(image_file)}")
             
             cv2.imwrite( os.path.join(dst, os.path.basename(image_file)), imgp )
         
@@ -821,7 +866,7 @@ class DSModifierCAR(DSModifier):
             "SCALE": 2,
             "model_dir": "./models/car/models",
             "gpu": 0,
-            "zoom": 3,
+            "zoom": 2,
             "blur": False,
             "resize_preprocess": True,
             "resize_postprocess": False,
@@ -841,19 +886,36 @@ class DSModifierCAR(DSModifier):
         ''' # save in self.params["model_dir"]
 
         self.CAR = CAR(SCALE=self.params["SCALE"],model_dir=self.params["model_dir"],gpu=self.params["gpu"])
-        self.name = f"CAR_scale{params['SCALE']}_x{params['zoom']}" # _modifier
+        self.name = f"CAR_scale{params['SCALE']}" # _modifier
         self.params.update({"modifier": "{}".format(self._get_name())})
 
+        if "zoom" in self.params.keys():
+            self.zoom           = params['zoom']
+            self.name += f"_x{params['zoom']}"
+            self.params.update({"modifier": "{}".format(self._get_name())})
+        else:
+            self.zoom = None
         if "blur" in self.params.keys():
             self.blur           = params['blur']
+            if self.blur is True:
+                self.name += "_blur"
+                self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.blur = False
         if "resize_preprocess" in self.params.keys():
             self.resize_preprocess = self.params["resize_preprocess"]
+            if self.resize_preprocess is True:
+                self.name += "_rpre"
+                self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.resize_preprocess = True
+            self.name += "_rpre"
+            self.params.update({"modifier": "{}".format(self._get_name())})
         if "resize_postprocess" in self.params.keys():
             self.resize_postprocess = self.params["resize_postprocess"]
+            if self.resize_postprocess is True:
+                self.name += "_rpost"
+                self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.resize_postprocess = False
 
@@ -862,20 +924,18 @@ class DSModifierCAR(DSModifier):
         input_name = os.path.basename(data_input)
         dst = os.path.join(mod_path, input_name)
         os.makedirs(dst, exist_ok=True)
-        print(f'[CAR] For each image file in <{data_input}>...')
+        print(f'{self.name} For each image file in <{data_input}>...')
         for data_file in os.listdir(data_input):
             file_path = os.path.join(data_input, data_file)
             dst_file = os.path.join(dst, data_file)
+            print(f"Running {self.name} over {os.path.basename(file_path)}")
             rec_img = self._mod_img(file_path)
             rec_img = pytensor2pil(rec_img)
-            if self.resize_postprocess is True:
-                orig_w, orig_h = pil_image.open(file_path).size
-                rec_img = rescale_image_exact(rec_img, orig_w, orig_h)
-                
             # check image size, resize if reconstructed image is not the same
             rec_w, rec_h = rec_img.size
-            if rec_w != orig_w or rec_h != orig_h:
-                rec_img = rec_img = rescale_image_exact(rec_img, orig_w, orig_h) # downscale in case of 4x
+            orig_w, orig_h = pil_image.open(file_path).size
+            if rec_w != orig_w or rec_h != orig_h or self.resize_postprocess is True:
+                rec_img = rescale_image_exact(rec_img, orig_w, orig_h) # downscale in case of 4x
             
             pilsaveimage(rec_img,dst_file)
             
@@ -884,10 +944,10 @@ class DSModifierCAR(DSModifier):
     def _mod_img(self, image_file: str) -> np.array:
         
         if self.resize_preprocess is True:
-            rec_img = self.CAR.run_upscale_mod(image_file, self.params['zoom'], self.blur)
+            rec_img = self.CAR.run_upscale_mod(image_file, self.params['zoom'], self.params['zoom'], self.blur)
             #rec_img = self.CAR.run_upscale_resized(image_file, self.params['zoom'])
         else:
-            rec_img = self.CAR.run_upscale_mod(image_file, None, self.blur)
+            rec_img = self.CAR.run_upscale_mod(image_file, None, self.params['zoom'], self.blur)
             #rec_img = self.CAR.run_upscale(image_file)
         return rec_img
 
@@ -925,42 +985,54 @@ class DSModifierSRGAN(DSModifier):
         self.name = f"SRGAN_arch_{self.params['arch']}_{checkpoint_name}_x{self.params['zoom']}" # _modifier
         self.params.update({"modifier": "{}".format(self._get_name())})
 
-
+        if "zoom" in self.params.keys():
+            self.zoom           = params['zoom']
+            self.name += f"_x{params['zoom']}"
+            self.params.update({"modifier": "{}".format(self._get_name())})
+        else:
+            self.zoom = None
         if "blur" in self.params.keys():
             self.blur           = params['blur']
+            if self.blur is True:
+                self.name += "_blur"
+                self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.blur = False
         if "resize_preprocess" in self.params.keys():
             self.resize_preprocess = self.params["resize_preprocess"]
+            if self.resize_preprocess is True:
+                self.name += "_rpre"
+                self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.resize_preprocess = True
+            self.name += "_rpre"
+            self.params.update({"modifier": "{}".format(self._get_name())})
         if "resize_postprocess" in self.params.keys():
             self.resize_postprocess = self.params["resize_postprocess"]
+            if self.resize_postprocess is True:
+                self.name += "_rpost"
+                self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.resize_postprocess = False
-
     def _ds_input_modification(self, data_input: str, mod_path: str) -> str:
         
         input_name = os.path.basename(data_input)
         dst = os.path.join(mod_path, input_name)
         os.makedirs(dst, exist_ok=True)
-        print(f'[SRGAN] For each image file in <{data_input}>...')
+        print(f'{self.name} For each image file in <{data_input}>...')
         for data_file in os.listdir(data_input):
             file_path = os.path.join(data_input, data_file)
             dst_file = os.path.join(dst, data_file)
+            print(f"Running {self.name} over {os.path.basename(file_path)}")
             rec_img = self._mod_img(file_path)
             #torchvision.utils.save_image(rec_img,dst_file)
             rec_img = pytensor2pil(rec_img)
             # check image size, resize if reconstructed image is not the same
-            if self.resize_postprocess is True:
-                orig_w, orig_h = pil_image.open(file_path).size
-                rec_img = rescale_image_exact(rec_img, orig_w, orig_h)
-                
-            # check image size, resize if reconstructed image is not the same
             rec_w, rec_h = rec_img.size
-            if rec_w != orig_w or rec_h != orig_h:
+            orig_w, orig_h = pil_image.open(file_path).size
+            if rec_w != orig_w or rec_h != orig_h or self.resize_postprocess is True:
                 rec_img = rescale_image_exact(rec_img, orig_w, orig_h) # downscale in case of 4x
-
+                
             pilsaveimage(rec_img,dst_file)
 
         return input_name
@@ -968,11 +1040,93 @@ class DSModifierSRGAN(DSModifier):
     def _mod_img(self, image_file: str) -> np.array:
 
         if self.resize_preprocess is True:
-            rec_img = self.SRGAN.run_sr_mod(image_file, self.params['zoom'], self.blur)
+            rec_img = self.SRGAN.run_sr_mod(image_file, self.params['zoom'], self.params['zoom'], self.blur)
             #rec_img = self.SRGAN.run_sr_resized(image_file, self.params["zoom"])
         else:
-            rec_img = self.SRGAN.run_sr_mod(image_file, None, self.blur)
+            rec_img = self.SRGAN.run_sr_mod(image_file, None, self.params['zoom'], self.blur)
             #rec_img = self.SRGAN.run_sr(image_file)
+        return rec_img
+
+class DSModifierLR(DSModifier):
+    def __init__(
+        self,
+        ds_modifier: Optional[DSModifier] = None,
+        params: Dict[str, Any] = {
+            "zoom": 2,
+            "blur": False,
+            "resize_preprocess": True,
+            "resize_postprocess": False,
+        },
+    ):
+        self.params = params
+        self.ds_modifier = ds_modifier
+
+        self.name = "GT-LR" # _modifier
+        self.params.update({"modifier": "{}".format(self._get_name())})
+
+        if "zoom" in self.params.keys():
+            self.zoom           = params['zoom']
+            self.name += f"_x{params['zoom']}"
+            self.params.update({"modifier": "{}".format(self._get_name())})
+        else:
+            self.zoom = None
+        if "blur" in self.params.keys():
+            self.blur           = params['blur']
+            if self.blur is True:
+                self.name += "_blur"
+                self.params.update({"modifier": "{}".format(self._get_name())})
+        else:
+            self.blur = False
+        if "resize_preprocess" in self.params.keys():
+            self.resize_preprocess = self.params["resize_preprocess"]
+            if self.resize_preprocess is True:
+                self.name += "_rpre"
+                self.params.update({"modifier": "{}".format(self._get_name())})
+        else:
+            self.resize_preprocess = True
+            self.name += "_rpre"
+            self.params.update({"modifier": "{}".format(self._get_name())})
+        if "resize_postprocess" in self.params.keys():
+            self.resize_postprocess = self.params["resize_postprocess"]
+            if self.resize_postprocess is True:
+                self.name += "_rpost"
+                self.params.update({"modifier": "{}".format(self._get_name())})
+        else:
+            self.resize_postprocess = False
+    def _ds_input_modification(self, data_input: str, mod_path: str) -> str:
+        
+        input_name = os.path.basename(data_input)
+        dst = os.path.join(mod_path, input_name)
+        os.makedirs(dst, exist_ok=True)
+        print(f'{self.name} For each image file in <{data_input}>...')
+        for data_file in os.listdir(data_input):
+            file_path = os.path.join(data_input, data_file)
+            dst_file = os.path.join(dst, data_file)
+            print(f"Running {self.name} over {os.path.basename(file_path)}")
+            rec_img = self._mod_img(file_path)
+            # check image size, resize if reconstructed image is not the same
+            rec_w, rec_h = rec_img.size
+            orig_w, orig_h = pil_image.open(file_path).size
+            if rec_w != orig_w or rec_h != orig_h or self.resize_postprocess is True:
+                rec_img = rescale_image_exact(rec_img, orig_w, orig_h)
+
+            pilsaveimage(rec_img,dst_file)
+            
+        return input_name
+
+    def _mod_img(self, image_file: str) -> np.array:
+        image = pil_image.open(image_file).convert('RGB')
+        orig_w, orig_h = image.size
+        scale = self.zoom
+
+        if self.blur is True:
+            image = blur_image(image, scale)
+
+        if self.resize_preprocess is True:
+            rec_img = rescale_image(image, scale, interpolation=pil_image.BICUBIC)
+        else:
+            rec_img = image
+
         return rec_img
 
 #########################
@@ -1004,7 +1158,7 @@ class DSModifierFake(DSModifier):
         dst_ext : str = 'tif',
         ds_modifier: Optional[DSModifier] = None,
         params: Dict[str, Any] = {
-            "zoom": 3
+            "zoom": 2
         }
     ):
         self.src_ext                = src_ext

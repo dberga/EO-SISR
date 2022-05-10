@@ -18,7 +18,7 @@ from iq_tool_box.experiments.task_execution import PythonScriptTaskExecution
 from iq_tool_box.metrics import RERMetric, SNRMetric
 from iq_tool_box.quality_metrics import ScoreMetrics, RERMetrics, SNRMetrics, GaussianBlurMetrics, NoiseSharpnessMetrics, GSDMetrics
 
-from custom_iqf import DSModifierMSRN, DSModifierFSRCNN,  DSModifierLIIF, DSModifierESRGAN, DSModifierCAR, DSModifierSRGAN, DSModifierFake
+from custom_iqf import DSModifierLR, DSModifierMSRN, DSModifierFSRCNN,  DSModifierLIIF, DSModifierESRGAN, DSModifierCAR, DSModifierSRGAN, DSModifierFake
 from custom_iqf import SimilarityMetrics
 from visual_comparison import visual_comp, scatter_plots, plotSNE
 
@@ -57,37 +57,13 @@ settings_lr_blur = False
 settings_resize_preprocess = True
 settings_resize_postprocess = False
 settings_zoom = 3
-use_fake_modifiers = True
+use_fake_modifiers = False
 
 #List of modifications that will be applied to the original dataset:
 ds_modifiers_list = [
-    DSModifierMSRN( params={
-    'zoom':settings_zoom,
-    'model':"MSRN_nonoise/MSRN_1to033/model_epoch_1500.pth",
-    'compress': False,
-    'add_noise': None,
-    'blur': settings_lr_blur,
-    'resize_preprocess': settings_resize_preprocess,
-    'resize_postprocess': settings_resize_postprocess,
-    } ),
-    DSModifierLIIF( params={
-        'config0':"LIIF_config.json",
-        'config1':"test_liif.yaml",
-        'model':"LIIF_blur/epoch-best.pth",
-        'blur': settings_lr_blur,
-        'resize_preprocess': settings_resize_preprocess,
-        'resize_postprocess': settings_resize_postprocess,
-    } ),
     DSModifierFSRCNN( params={
         'config':"test_scale3.json",
         'model':"FSRCNN_1to033_x3_blur/best.pth",
-        'blur': settings_lr_blur,
-        'resize_preprocess': settings_resize_preprocess,
-        'resize_postprocess': settings_resize_postprocess,
-    } ),
-    DSModifierESRGAN( params={
-        'zoom':settings_zoom,
-        'model':"ESRGAN_1to033_x3_blur/net_g_latest.pth",
         'blur': settings_lr_blur,
         'resize_preprocess': settings_resize_preprocess,
         'resize_postprocess': settings_resize_postprocess,
@@ -104,6 +80,22 @@ ds_modifiers_list = [
         'resize_preprocess': settings_resize_preprocess,
         'resize_postprocess': settings_resize_postprocess,
     } ),
+    DSModifierMSRN( params={
+    'zoom':settings_zoom,
+    'model':"MSRN_nonoise/MSRN_1to033/model_epoch_1500.pth",
+    'compress': False,
+    'add_noise': None,
+    'blur': settings_lr_blur,
+    'resize_preprocess': settings_resize_preprocess,
+    'resize_postprocess': settings_resize_postprocess,
+    } ),
+    DSModifierESRGAN( params={
+        'zoom':settings_zoom,
+        'model':"ESRGAN_1to033_x3_blur/net_g_latest.pth",
+        'blur': settings_lr_blur,
+        'resize_preprocess': settings_resize_preprocess,
+        'resize_postprocess': settings_resize_postprocess,
+    } ),
     DSModifierCAR( params={
         "SCALE": 4,
         #"SCALE": 2,
@@ -114,10 +106,24 @@ ds_modifiers_list = [
         'resize_preprocess': settings_resize_preprocess,
         'resize_postprocess': settings_resize_postprocess,
     } ),
+    DSModifierLIIF( params={
+        'config0':"LIIF_config.json",
+        'config1':"test_liif.yaml",
+        'model':"LIIF_blur/epoch-best.pth",
+        'blur': settings_lr_blur,
+        'resize_preprocess': settings_resize_preprocess,
+        'resize_postprocess': settings_resize_postprocess,
+    } ),
+    DSModifierLR( params={
+        'zoom':settings_zoom,
+        'blur': settings_lr_blur,
+        'resize_preprocess': settings_resize_preprocess,
+        'resize_postprocess': settings_resize_postprocess,
+    }),
 ]
 
 # adding fake modifier of original images (GT)
-ds_modifiers_list.append(DSModifierFake(name="GT_LR",images_dir=images_path))
+ds_modifiers_list.append(DSModifierFake(name="GT-HR",images_dir=images_path))
 
 # use fake modifiers (read existing)
 if use_fake_modifiers: 
@@ -158,8 +164,8 @@ experiment_info = ExperimentInfo(experiment_name)
 
 print('Visualizing examples')
 
-lst_folders_mod = [images_path]+[os.path.join(data_path+'#'+ds_modifier._get_name(),images_folder) for ds_modifier in ds_modifiers_list]
-lst_labels_mod = ["GT_HR"]+[ds_modifier._get_name().replace("sisr+","").split("_")[0] for ds_modifier in ds_modifiers_list] # authomatic readout from folders
+lst_folders_mod = [os.path.join(data_path+'#'+ds_modifier._get_name(),images_folder) for ds_modifier in ds_modifiers_list]
+lst_labels_mod = [ds_modifier._get_name().replace("sisr+","").split("_")[0] for ds_modifier in ds_modifiers_list] # authomatic readout from folders
 
 visual_comp(lst_folders_mod, lst_labels_mod, True, "comparison/")
 
@@ -169,7 +175,7 @@ win = 28
 _ = experiment_info.apply_metric_per_run(
     SimilarityMetrics(
         experiment_info,
-        n_jobs               = 1, #5,
+        n_jobs               = 4,
         ext                  = 'tif',
         n_pyramids           = 1,
         slice_size           = 7,

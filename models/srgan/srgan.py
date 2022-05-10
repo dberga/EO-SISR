@@ -7,7 +7,6 @@ import torch
 import torch.backends.cudnn as cudnn
 import torch.optim
 import torch.utils.data
-import torchvision.transforms as transforms
 from PIL import Image
 from torchvision.transforms import InterpolationMode
 
@@ -17,10 +16,14 @@ from .srgan_pytorch.utils.common import create_folder
 from .srgan_pytorch.utils.estimate import iqa
 from .srgan_pytorch.utils.transform import process_image
 
+
+import numpy as np
+import kornia
+import torchvision.transforms as transforms
 def blur_image(image, scale):
     img_tensor = transforms.ToTensor()(image).unsqueeze_(0)
-    sigma = 0.5 * scale
-    kernel_size = math.ceil(sigma * 3 + 4)
+    sigma = 0.5 * scale if scale is not None else 7.0
+    kernel_size = int(np.ceil(sigma * 3 + 4))
     kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
     image_blur = kornia.filters.filter2d(img_tensor, kernel_tensor[None])
     image = transforms.ToPILImage()(image_blur.squeeze_(0))
@@ -65,8 +68,7 @@ class SRGAN:
 
         cudnn.benchmark = True
     
-    def run_sr_mod(self, img_file, scale = None, blur = False):
-        print(f"Running SRGAN arch ({self.arch}) over {img_file}")
+    def run_sr_mod(self, img_file, scale = None, zoom = 3, blur = False):
         lr = Image.open(img_file)
         if scale is not None:
             width, height = lr.size
@@ -74,7 +76,7 @@ class SRGAN:
             lr = resize_pil_img(lr, int(pscale*width), int(pscale*height))
         if blur is True:
             if scale is None:
-                lr = blur_image(lr, 2)
+                lr = blur_image(lr, zoom)
             else:
                 lr = blur_image(lr, scale)
         lr = process_image(lr, self.gpu) # convert to pytorch tensor
@@ -83,7 +85,6 @@ class SRGAN:
         return sr
 
     def run_sr(self, img_file):
-        print(f"Running SRGAN arch ({self.arch}) over {img_file}")
         lr = Image.open(img_file)
         lr = process_image(lr, self.gpu) # convert to pytorch tensor
         with torch.no_grad():
@@ -91,7 +92,6 @@ class SRGAN:
         return sr
 
     def run_sr_resized(self, img_file, scale = 2):
-        print(f"Running SRGAN arch ({self.arch}) over {img_file}")
         lr = Image.open(img_file)
         width, height = lr.size
         pscale = float(1.0 / float(scale))
