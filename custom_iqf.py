@@ -81,8 +81,6 @@ def rescale_image(image, scale, interpolation=pil_image.BICUBIC):
         image = image.resize((image.width // scale, image.height // scale), resample=interpolation)
     return image
 def rescale_image_exact(image, width, height, interpolation=pil_image.BICUBIC):
-    if scale is None or scale == 1.0:
-        return image
     if type(image).__name__ == "ndarray":
         image = pil_image.fromarray(image)
         image = image.resize((width, height), resample=interpolation)
