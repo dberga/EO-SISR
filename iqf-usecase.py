@@ -40,14 +40,13 @@ experiment_name = "SiSR"
 # Remove previous mlflow records of previous executions of the same experiment
 try: # rm_experiment
     mlflow.delete_experiment(ExperimentInfo(f"{experiment_name}").experiment_id)
+    # Clean mlruns and __pycache__ folders
+    shutil.rmtree("mlruns/",ignore_errors=True)
+    os.makedirs("mlruns/.trash", exist_ok=True)
+    shutil.rmtree(f"{data_path}/.ipynb_checkpoints",ignore_errors=True)
+    [shutil.rmtree(x) for x in glob(os.path.join(os.getcwd(), "**", '__pycache__'), recursive=True)]
 except:
     pass
-
-# Clean mlruns and __pycache__ folders
-shutil.rmtree("mlruns/",ignore_errors=True)
-os.makedirs("mlruns/.trash", exist_ok=True)
-shutil.rmtree(f"{data_path}/.ipynb_checkpoints",ignore_errors=True)
-[shutil.rmtree(x) for x in glob(os.path.join(os.getcwd(), "**", '__pycache__'), recursive=True)]
 
 # plot SNE of existing images
 if plot_sne:
