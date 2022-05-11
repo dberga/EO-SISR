@@ -3,6 +3,7 @@ import PIL.Image as pil_image
 from torchvision import transforms
 import kornia
 import numpy as np
+from copy import deepcopy
 
 # LRSimulator
 from typing import List, Optional, Tuple, Union
@@ -16,7 +17,7 @@ def blur_image(image, scale):
     if init_type == "ndarray":
         image = pil_image.fromarray(image) # cv2pil, np2pil
     if "Tensor" in init_type:
-        img_tensor = image.copy()
+        img_tensor = deepcopy(image)
     else:
         img_tensor = transforms.ToTensor()(image).unsqueeze_(0) # pil2tensor
     # kornia's gaussian blur (using torch tensor)
