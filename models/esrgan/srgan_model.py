@@ -1,10 +1,10 @@
 import torch
 from collections import OrderedDict
 
-from archs.esrgan import build_network
-from losses.esrgan import build_loss
-from utils.esrgan import get_root_logger
-from utils.esrgan.registry import MODEL_REGISTRY
+from .archs import build_network
+from .losses import build_loss
+from .utils.logger import get_root_logger
+from .utils.registry import MODEL_REGISTRY
 from .sr_model import SRModel
 
 

@@ -13,21 +13,10 @@ from .modules import DSN
 import numpy as np
 import kornia
 import torchvision.transforms as transforms
-def blur_image(image, scale):
-    img_type = type(image).__name__
-    if "Tensor" not in img_type:
-        img_tensor = transforms.ToTensor()(image).unsqueeze_(0)
-    else:
-        img_tensor = image
-    sigma = 0.5 * scale if scale is not None else 7.0
-    kernel_size = int(np.ceil(sigma * 3 + 4))
-    kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))   
-    image_blur = kornia.filters.filter2d(img_tensor, kernel_tensor[None])
-    if "Tensor" not in img_type:
-        image = transforms.ToPILImage()(image_blur.squeeze_(0))
-    else:
-        image = image_blur
-    return image
+
+import sys
+sys.path.append("../..")
+from custom_transforms import blur_image
 
 class CAR:
     def __init__(
@@ -101,9 +90,6 @@ def pytensor2pil(img):
     img = img[0, ...].squeeze()
     img = Image.fromarray(img)
     return img
-
-def pilsaveimage(img, path):
-    img.save(path)
 
 def load_car_model(model_fn = "./models/2x/usn.pth", SCALE = 2):
     device = torch.device('cuda')

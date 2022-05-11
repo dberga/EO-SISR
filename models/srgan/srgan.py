@@ -16,18 +16,13 @@ from .srgan_pytorch.utils.common import create_folder
 from .srgan_pytorch.utils.estimate import iqa
 from .srgan_pytorch.utils.transform import process_image
 
-
 import numpy as np
 import kornia
 import torchvision.transforms as transforms
-def blur_image(image, scale):
-    img_tensor = transforms.ToTensor()(image).unsqueeze_(0)
-    sigma = 0.5 * scale if scale is not None else 7.0
-    kernel_size = int(np.ceil(sigma * 3 + 4))
-    kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
-    image_blur = kornia.filters.filter2d(img_tensor, kernel_tensor[None])
-    image = transforms.ToPILImage()(image_blur.squeeze_(0))
-    return image
+
+import sys
+sys.path.append("../..")
+from custom_transforms import blur_image
 
 class SRGAN:
     def __init__(

@@ -5,8 +5,11 @@ from collections import OrderedDict
 from copy import deepcopy
 from torch.nn.parallel import DataParallel, DistributedDataParallel
 
-from models.esrgan import lr_scheduler as lr_scheduler
-from utils.esrgan.dist_util import master_only
+import sys
+sys.path.append(".")
+import pdb; pdb.set_trace()
+import lr_scheduler as lr_scheduler
+from ..utils.dist_util import master_only
 
 logger = logging.getLogger('basicsr')
 

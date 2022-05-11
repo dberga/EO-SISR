@@ -2,7 +2,7 @@ import torch
 torch.cuda.empty_cache()
 from collections import OrderedDict
 
-from utils.esrgan.registry import MODEL_REGISTRY
+from .utils.registry import MODEL_REGISTRY
 from .srgan_model import SRGANModel
 
 

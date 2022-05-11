@@ -1,43 +1,28 @@
 import os
 import shutil
-import piq
-import torch
-
-from glob import glob
-from scipy import ndimage
-from typing import Any, Dict, Optional, Union, Tuple, List
-
-import cv2
 import mlflow
-import numpy as np
-# update with "pip install git+https://gitlab+deploy-token-45:FKSA3HpmgUoxa5RZ69Cf@git.satellogic.team/iqf/iqf_tool_box@rebase-before-iquaflow"
+from glob import glob
+
+## update iquaflow with "pip install git+git@github.com:satellogic/iquaflow.git"
+## old rebase (iq_tool_box): "pip install git+https://gitlab+deploy-token-45:FKSA3HpmgUoxa5RZ69Cf@git.satellogic.team/iqf/iqf_tool_box@rebase-before-iquaflow"
 from iq_tool_box.datasets import DSWrapper
 from iq_tool_box.experiments import ExperimentInfo, ExperimentSetup
 from iq_tool_box.experiments.experiment_visual import ExperimentVisual
 from iq_tool_box.experiments.task_execution import PythonScriptTaskExecution
-from iq_tool_box.metrics import RERMetric, SNRMetric
+from iq_tool_box.metrics import RERMetric, SNRMetric # RER name to be changed to SharpnessMetric
 from iq_tool_box.quality_metrics import ScoreMetrics, RERMetrics, SNRMetrics, GaussianBlurMetrics, NoiseSharpnessMetrics, GSDMetrics
 
-from custom_iqf import DSModifierLR, DSModifierMSRN, DSModifierFSRCNN,  DSModifierLIIF, DSModifierESRGAN, DSModifierCAR, DSModifierSRGAN, DSModifierFake
-from custom_iqf import SimilarityMetrics
+from custom_modifiers import DSModifierLR, DSModifierFake, DSModifierMSRN, DSModifierFSRCNN,  DSModifierLIIF, DSModifierESRGAN, DSModifierCAR, DSModifierSRGAN
+from custom_metrics import SimilarityMetrics
 from visual_comparison import visual_comp, scatter_plots, plotSNE
 
-def rm_experiment(experiment_name = "SiSR"):
-    """Remove previous mlflow records of previous executions of the same experiment"""
-    try:
-        mlflow.delete_experiment(ExperimentInfo(f"{experiment_name}").experiment_id)
-    except:
-        pass
-    shutil.rmtree("mlruns/",ignore_errors=True)
-    os.makedirs("mlruns/.trash", exist_ok=True)
-    shutil.rmtree(f"./Data/test-ds/.ipynb_checkpoints",ignore_errors=True)
-    [shutil.rmtree(x) for x in glob(os.path.join(os.getcwd(), "**", '__pycache__'), recursive=True)]
-    
-#Define name of IQF experiment
-experiment_name = "SiSR"
-
-# Remove previous mlflow records of previous executions of the same experiment
-rm_experiment(experiment_name = experiment_name)
+# SiSR Execution settings
+plot_sne = False                     # t-SNE plot? (requires a bit of RAM)
+use_fake_modifiers = False          # read existing sr output data files instead of modifying?
+settings_lr_blur = False            # blur right before modification?
+settings_resize_preprocess = True   # resize right before modification?
+settings_resize_postprocess = False # resize right after modification?
+settings_zoom = 3                   # scale?
 
 #Define path of the original(reference) dataset
 data_path = f"./Data/test-ds"
@@ -49,15 +34,24 @@ data_root = os.path.dirname(data_path)
 #DS wrapper is the class that encapsulate a dataset
 ds_wrapper = DSWrapper(data_path=data_path)
 
-# plot SNE of existing images
-plotSNE(database_name, images_path, (232,232), 6e4, True, True, "plots/")
+#Define name of IQF experiment
+experiment_name = "SiSR"
 
-#Settings for modifier preprocessing
-settings_lr_blur = False
-settings_resize_preprocess = True
-settings_resize_postprocess = False
-settings_zoom = 3
-use_fake_modifiers = False
+# Remove previous mlflow records of previous executions of the same experiment
+try: # rm_experiment
+    mlflow.delete_experiment(ExperimentInfo(f"{experiment_name}").experiment_id)
+except:
+    pass
+
+# Clean mlruns and __pycache__ folders
+shutil.rmtree("mlruns/",ignore_errors=True)
+os.makedirs("mlruns/.trash", exist_ok=True)
+shutil.rmtree(f"{data_path}/.ipynb_checkpoints",ignore_errors=True)
+[shutil.rmtree(x) for x in glob(os.path.join(os.getcwd(), "**", '__pycache__'), recursive=True)]
+
+# plot SNE of existing images
+if plot_sne:
+    plotSNE(database_name, images_path, (232,232), 6e4, True, True, "plots/")
 
 #List of modifications that will be applied to the original dataset:
 ds_modifiers_list = [
@@ -125,9 +119,8 @@ ds_modifiers_list = [
 # adding fake modifier of original images (GT)
 ds_modifiers_list.append(DSModifierFake(name="GT-HR",images_dir=images_path))
 
-# use fake modifiers (read existing)
+# check existing modified images and replace already processed modifiers by DSModifierFake (only read images)
 if use_fake_modifiers: 
-    # check existing modified images and replace already processed modifiers by DSModifierFake (only read images)
     ds_modifiers_indexes_dict = {}
     for idx,ds_modifier in enumerate(ds_modifiers_list):
         ds_modifiers_indexes_dict[ds_modifier._get_name()]=idx
@@ -186,6 +179,7 @@ _ = experiment_info.apply_metric_per_run(
         return_by_resolution = False,
         pyramid_batchsize    = win,
         use_liif_loader      = True,
+        zoom                 = settings_zoom,
         blur                 = settings_lr_blur,
         resize_preprocess    = settings_resize_preprocess,
     ),
