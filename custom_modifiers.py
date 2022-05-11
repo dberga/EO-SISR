@@ -17,6 +17,7 @@ from models.liif import utils_liif
 from models.msrn.msrn import process_file_msrn
 from models.car.car import CAR
 from models.srgan.srgan import SRGAN
+from models.esrgan import esrgan
 
 # Vision
 import torch
