@@ -12,6 +12,10 @@ import cv2
 import sys
 import rasterio
 
+import sys
+sys.path.append("../..")
+from custom_transforms import blur_image
+
 def save_tif(path_out_samples, fname, res, target_resolution=0.7,
              name=None, name_id='MSRN07',
              channel_order_out='rgb', 
@@ -136,14 +140,18 @@ class noiseLayer_normal(nn.Module):
 class WindowsDataset_SR(data.Dataset):
     def __init__(self, nimg, wind_size=512, stride=480, scale=2, blur=False):
         if blur is True:
-            x_in = kornia.image_to_tensor(nimg).float()
-            x_in = torch.unsqueeze(x_in, 0)
-            sigma = 0.5 * scale if scale is not None else 7.0
-            kernel_size = math.ceil(sigma * 3 + 4)
-            kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
-            x_in = kornia.filters.filter2d(x_in, kernel_tensor[None])[0]
-            # x_in = kornia.geometry.rescale(x_in, 1 / scale, 'bicubic')
-            nimg = kornia.tensor_to_image(torch.squeeze(x_in))
+            try: # todo: check this
+                nimg = blur_image(x_in, scale)
+            except:
+                x_in = kornia.image_to_tensor(nimg).float()
+                x_in = torch.unsqueeze(x_in, 0)
+                sigma = 0.5 * scale if scale is not None else 7.0
+                kernel_size = math.ceil(sigma * 3 + 4)
+                kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
+                x_in = kornia.filters.filter2d(x_in, kernel_tensor[None])[0]
+                # x_in = kornia.geometry.rescale(x_in, 1 / scale, 'bicubic')
+                nimg = kornia.tensor_to_image(torch.squeeze(x_in))
+
         self.nimg = nimg
 
         H, W, C = nimg.shape
