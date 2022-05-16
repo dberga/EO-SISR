@@ -4,6 +4,7 @@ from glob import glob
 from typing import Any, Dict, List, Union, Tuple # Optional, Tuple
 from joblib.externals.loky.backend.context import get_context
 from joblib import Parallel, delayed
+import numpy as np
 
 # Dataset loadout
 from torch.utils.data import DataLoader
@@ -13,13 +14,18 @@ from custom_transforms import LRSimulator
 
 # Vision
 import cv2
+import PIL.Image as pil_image
 import torch
+from torchvision import transforms
 import piq
 from metrics.swd import SlicedWassersteinDistance
 
 # iquaflow
 from iq_tool_box.experiments import ExperimentInfo
 from iq_tool_box.metrics import Metric
+
+# Custom Transforms
+from custom_transforms import blur_image, rescale_image, rescale_image_wh
 
 #########################
 # Similarity Metrics
@@ -91,7 +97,11 @@ class SimilarityMetrics( Metric ):
                 bucket_name   = "image-quality-framework",
                 algo          = "LIIF"
         )
-        spec   =  model_conf.spec
+        model,args = model_conf.load_ai_model_and_stuff()
+        try:
+            spec   =  model_conf.spec
+        except:
+            import pdb;pdb.set_trace()
 
         # dataset loader specifications
         spec['batch_size'] = 1
@@ -181,13 +191,19 @@ class SimilarityMetrics( Metric ):
 
             # todo: use blur_image function instead
             if self.blur is True:
+                '''
                 scale = 3
                 sigma = 0.5*scale
                 kernel_size = 9
                 kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
                 gt = torch.clamp( kornia.filters.filter2d(img_tensor, kernel_tensor[None]), min=0.0, max=1.0 )
+                '''
+                gt = blur_image(img_tensor,self.zoom)
             else:
                 gt = img_tensor
+
+        #clamp residual (eps) values (e.g. 1.0000001192092896) to 1.0 after preprocessing
+        gt = torch.clamp(gt, min=0.0, max=1.0)
 
         results_dict = {
             "ssim":None,
@@ -215,16 +231,17 @@ class SimilarityMetrics( Metric ):
         else:
 
             pred_for_metrics = pred
-        
-        results_dict = {
-            "ssim":piq.ssim(pred_for_metrics,gt).item(),
-            "psnr":piq.psnr(pred_for_metrics,gt).item(),
-            "fid":np.sum( [
-                fid( torch.squeeze(pred_for_metrics)[i,...], torch.squeeze(gt)[i,...] ).item()
-                for i in range( pred_for_metrics.shape[1] )
-                ] ) / pred_for_metrics.shape[1]
-        }
-        
+        try:
+            results_dict = {
+                "ssim":piq.ssim(pred_for_metrics,gt).item(),
+                "psnr":piq.psnr(pred_for_metrics,gt).item(),
+                "fid":np.sum( [
+                    fid( torch.squeeze(pred_for_metrics)[i,...], torch.squeeze(gt)[i,...] ).item()
+                    for i in range( pred_for_metrics.shape[1] )
+                    ] ) / pred_for_metrics.shape[1]
+            }
+        except:
+            import pdb; pdb.set_trace()
         # Make gt even
         if gt.shape[-2]%2!=0 or gt.shape[-1]%2!=0 : # gt size is odd
             new_gt_h = gt.shape[-2]+1 if (gt.shape[-2]+1)%2 == 0 else gt.shape[-2]
