@@ -16,7 +16,7 @@ import torchvision.transforms as transforms
 
 import sys
 sys.path.append("../..")
-from custom_transforms import blur_image
+from custom_transforms import blur_image, rescale_image
 
 class CAR:
     def __init__(
@@ -53,16 +53,16 @@ class CAR:
         #self.downsampler_net.eval()
         self.upscale_net.eval()
     
-    def run_upscale_mod(self, img_file, scale = None, zoom = None, blur = False):
-        if scale is not None:
-            img = load_img_resized(img_file, scale)
-        else:
-            img = load_img(img_file)
+    def run_upscale_mod(self, img_file, rescale = False, zoom = None, blur = False):
+
+        img = load_img(img_file)
+
         if blur is True:
-            if scale is None:
-                img = blur_image(img, zoom)
-            else:
-                img = blur_image(img, scale)
+            img = blur_image(img, zoom)
+
+        if rescale is not False:
+            img = rescale_image(img, zoom)
+
         reconstructed_img = self.upscale_net(img)
         return reconstructed_img
 

@@ -22,7 +22,7 @@ import torchvision.transforms as transforms
 
 import sys
 sys.path.append("../..")
-from custom_transforms import blur_image
+from custom_transforms import blur_image, rescale_image
 
 class SRGAN:
     def __init__(
@@ -63,17 +63,15 @@ class SRGAN:
 
         cudnn.benchmark = True
     
-    def run_sr_mod(self, img_file, scale = None, zoom = 3, blur = False):
+    def run_sr_mod(self, img_file, rescale = False, zoom = 3, blur = False):
         lr = Image.open(img_file)
-        if scale is not None:
-            width, height = lr.size
-            pscale = float(1.0 / float(scale))
-            lr = resize_pil_img(lr, int(pscale*width), int(pscale*height))
+
         if blur is True:
-            if scale is None:
-                lr = blur_image(lr, zoom)
-            else:
-                lr = blur_image(lr, scale)
+            lr = blur_image(lr, zoom)
+
+        if rescale is True:
+            lr = rescale_image(lr, zoom)
+
         lr = process_image(lr, self.gpu) # convert to pytorch tensor
         with torch.no_grad():
             sr = self.model(lr)

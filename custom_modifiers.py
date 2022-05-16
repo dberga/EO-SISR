@@ -49,7 +49,7 @@ class DSModifierLR(DSModifier):
         self.params = params
         self.ds_modifier = ds_modifier
 
-        self.name = "GT-LR" # _modifier
+        self.name = "LR" # _modifier
         self.params.update({"modifier": "{}".format(self._get_name())})
 
         if "zoom" in self.params.keys():
@@ -61,18 +61,18 @@ class DSModifierLR(DSModifier):
         if "blur" in self.params.keys():
             self.blur           = params['blur']
             if self.blur is True:
-                self.name += "_blur"
+                self.name += "_blur" + f"{self.zoom}"
                 self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.blur = False
         if "resize_preprocess" in self.params.keys():
             self.resize_preprocess = self.params["resize_preprocess"]
             if self.resize_preprocess is True:
-                self.name += "_rpre"
+                self.name += "_rpre" + f"{self.zoom}"
                 self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.resize_preprocess = True
-            self.name += "_rpre"
+            self.name += "_rpre" + f"{self.zoom}"
             self.params.update({"modifier": "{}".format(self._get_name())})
         if "resize_postprocess" in self.params.keys():
             self.resize_postprocess = self.params["resize_postprocess"]
@@ -202,6 +202,7 @@ class DSModifierLIIF(DSModifier):
             "config0": "LIIF_config.json",
             "config1": "test_liif.yaml",
             "model": "liif_UCMerced/epoch-best.pth",
+            "zoom": 3,
             "blur": False,
             "resize_preprocess": True,
             "resize_postprocess": False,
@@ -244,18 +245,18 @@ class DSModifierLIIF(DSModifier):
         if "blur" in self.params.keys():
             self.blur           = params['blur']
             if self.blur is True:
-                self.name += "_blur"
+                self.name += "_blur" + f"{self.zoom}"
                 self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.blur = False
         if "resize_preprocess" in self.params.keys():
             self.resize_preprocess = self.params["resize_preprocess"]
             if self.resize_preprocess is True:
-                self.name += "_rpre"
+                self.name += "_rpre" + f"{self.zoom}"
                 self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.resize_preprocess = True
-            self.name += "_rpre"
+            self.name += "_rpre" + f"{self.zoom}"
             self.params.update({"modifier": "{}".format(self._get_name())})
         if "resize_postprocess" in self.params.keys():
             self.resize_postprocess = self.params["resize_postprocess"]
@@ -379,6 +380,7 @@ class DSModifierFSRCNN(DSModifier):
             "algo":"FSRCNN",
             "config": "test.json",
             "model": "FSRCNN_1to033_x3_noblur/best.pth",
+            "zoom": 3,
             "blur": False,
             "resize_preprocess": True,
             "resize_postprocess": False,
@@ -403,18 +405,18 @@ class DSModifierFSRCNN(DSModifier):
         if "blur" in self.params.keys():
             self.blur           = params['blur']
             if self.blur is True:
-                self.name += "_blur"
+                self.name += "_blur" + f"{self.zoom}"
                 self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.blur = False
         if "resize_preprocess" in self.params.keys():
             self.resize_preprocess = self.params["resize_preprocess"]
             if self.resize_preprocess is True:
-                self.name += "_rpre"
+                self.name += "_rpre" + f"{self.zoom}"
                 self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.resize_preprocess = True
-            self.name += "_rpre"
+            self.name += "_rpre" + f"{self.zoom}"
             self.params.update({"modifier": "{}".format(self._get_name())})
         if "resize_postprocess" in self.params.keys():
             self.resize_postprocess = self.params["resize_postprocess"]
@@ -505,10 +507,10 @@ class DSModifierMSRN(DSModifier):
         ds_modifier: Optional[DSModifier] = None,
         params: Dict[str, Any] = {
             "algo":"MSRN",
-            "zoom": 2,
             "model": "MSRN/SISR_MSRN_X2_BICUBIC.pth",
             "compress": False,
             "add_noise": False,
+            "zoom": 2,
             "blur": False,
             "resize_preprocess": True,
             "resize_postprocess": False,
@@ -546,18 +548,18 @@ class DSModifierMSRN(DSModifier):
         if "blur" in self.params.keys():
             self.blur           = params['blur']
             if self.blur is True:
-                self.name += "_blur"
+                self.name += "_blur" + f"{self.zoom}"
                 self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.blur = False
         if "resize_preprocess" in self.params.keys():
             self.resize_preprocess = self.params["resize_preprocess"]
             if self.resize_preprocess is True:
-                self.name += "_rpre"
+                self.name += "_rpre" + f"{self.zoom}"
                 self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.resize_preprocess = True
-            self.name += "_rpre"
+            self.name += "_rpre" + f"{self.zoom}"
             self.params.update({"modifier": "{}".format(self._get_name())})
         if "resize_postprocess" in self.params.keys():
             self.resize_postprocess = self.params["resize_postprocess"]
@@ -614,6 +616,9 @@ class DSModifierMSRN(DSModifier):
         gpu_device = "0"
         res_output = 1/zoom # inria resolution
 
+        if self.blur is True:
+            loaded = blur_image(loaded, zoom)
+
         if self.resize_preprocess is True:
             loaded = rescale_image(loaded, zoom)
 
@@ -629,7 +634,6 @@ class DSModifierMSRN(DSModifier):
             batch_size=1,
             padding=5,
             add_noise=self.add_noise,# None,
-            blur=self.blur, #True
         )
         if self.resize_postprocess is True:
             rec_img = rescale_image_wh(rec_img, orig_w, orig_h)
@@ -642,8 +646,8 @@ class DSModifierESRGAN(DSModifier):
         ds_modifier: Optional[DSModifier] = None,
         params: Dict[str, Any] = {
             "algo":"ESRGAN",
-            "zoom": 2,
             "model": "./ESRGAN_1to033_x3_blur/net_g_latest.pth",
+            "zoom": 2,
             "blur": False,
             "resize_preprocess": True,
             "resize_postprocess": False,
@@ -668,18 +672,18 @@ class DSModifierESRGAN(DSModifier):
         if "blur" in self.params.keys():
             self.blur           = params['blur']
             if self.blur is True:
-                self.name += "_blur"
+                self.name += "_blur" + f"{self.zoom}"
                 self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.blur = False
         if "resize_preprocess" in self.params.keys():
             self.resize_preprocess = self.params["resize_preprocess"]
             if self.resize_preprocess is True:
-                self.name += "_rpre"
+                self.name += "_rpre" + f"{self.zoom}"
                 self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.resize_preprocess = True
-            self.name += "_rpre"
+            self.name += "_rpre" + f"{self.zoom}"
             self.params.update({"modifier": "{}".format(self._get_name())})
         if "resize_postprocess" in self.params.keys():
             self.resize_postprocess = self.params["resize_postprocess"]
@@ -777,18 +781,18 @@ class DSModifierCAR(DSModifier):
         if "blur" in self.params.keys():
             self.blur           = params['blur']
             if self.blur is True:
-                self.name += "_blur"
+                self.name += "_blur" + f"{self.zoom}"
                 self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.blur = False
         if "resize_preprocess" in self.params.keys():
             self.resize_preprocess = self.params["resize_preprocess"]
             if self.resize_preprocess is True:
-                self.name += "_rpre"
+                self.name += "_rpre" + f"{self.zoom}"
                 self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.resize_preprocess = True
-            self.name += "_rpre"
+            self.name += "_rpre" + f"{self.zoom}"
             self.params.update({"modifier": "{}".format(self._get_name())})
         if "resize_postprocess" in self.params.keys():
             self.resize_postprocess = self.params["resize_postprocess"]
@@ -823,10 +827,10 @@ class DSModifierCAR(DSModifier):
     def _mod_img(self, image_file: str) -> np.array:
         
         if self.resize_preprocess is True:
-            rec_img = self.CAR.run_upscale_mod(image_file, self.params['zoom'], self.params['zoom'], self.blur)
+            rec_img = self.CAR.run_upscale_mod(image_file, True, self.params['zoom'], self.blur)
             #rec_img = self.CAR.run_upscale_resized(image_file, self.params['zoom'])
         else:
-            rec_img = self.CAR.run_upscale_mod(image_file, None, self.params['zoom'], self.blur)
+            rec_img = self.CAR.run_upscale_mod(image_file, False, self.params['zoom'], self.blur)
             #rec_img = self.CAR.run_upscale(image_file)
         return rec_img
 
@@ -873,18 +877,18 @@ class DSModifierSRGAN(DSModifier):
         if "blur" in self.params.keys():
             self.blur           = params['blur']
             if self.blur is True:
-                self.name += "_blur"
+                self.name += "_blur" + f"{self.zoom}"
                 self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.blur = False
         if "resize_preprocess" in self.params.keys():
             self.resize_preprocess = self.params["resize_preprocess"]
             if self.resize_preprocess is True:
-                self.name += "_rpre"
+                self.name += "_rpre" + f"{self.zoom}"
                 self.params.update({"modifier": "{}".format(self._get_name())})
         else:
             self.resize_preprocess = True
-            self.name += "_rpre"
+            self.name += "_rpre" + f"{self.zoom}"
             self.params.update({"modifier": "{}".format(self._get_name())})
         if "resize_postprocess" in self.params.keys():
             self.resize_postprocess = self.params["resize_postprocess"]
@@ -919,9 +923,9 @@ class DSModifierSRGAN(DSModifier):
     def _mod_img(self, image_file: str) -> np.array:
 
         if self.resize_preprocess is True:
-            rec_img = self.SRGAN.run_sr_mod(image_file, self.params['zoom'], self.params['zoom'], self.blur)
+            rec_img = self.SRGAN.run_sr_mod(image_file, True, self.params['zoom'], self.blur)
             #rec_img = self.SRGAN.run_sr_resized(image_file, self.params["zoom"])
         else:
-            rec_img = self.SRGAN.run_sr_mod(image_file, None, self.params['zoom'], self.blur)
+            rec_img = self.SRGAN.run_sr_mod(image_file, False, self.params['zoom'], self.blur)
             #rec_img = self.SRGAN.run_sr(image_file)
         return rec_img

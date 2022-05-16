@@ -12,10 +12,6 @@ import cv2
 import sys
 import rasterio
 
-import sys
-sys.path.append("../..")
-from custom_transforms import blur_image
-
 def save_tif(path_out_samples, fname, res, target_resolution=0.7,
              name=None, name_id='MSRN07',
              channel_order_out='rgb', 
@@ -138,20 +134,7 @@ class noiseLayer_normal(nn.Module):
         return x
 
 class WindowsDataset_SR(data.Dataset):
-    def __init__(self, nimg, wind_size=512, stride=480, scale=2, blur=False):
-        if blur is True:
-            try: # todo: check this
-                nimg = blur_image(x_in, scale)
-            except:
-                x_in = kornia.image_to_tensor(nimg).float()
-                x_in = torch.unsqueeze(x_in, 0)
-                sigma = 0.5 * scale if scale is not None else 7.0
-                kernel_size = math.ceil(sigma * 3 + 4)
-                kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
-                x_in = kornia.filters.filter2d(x_in, kernel_tensor[None])[0]
-                # x_in = kornia.geometry.rescale(x_in, 1 / scale, 'bicubic')
-                nimg = kornia.tensor_to_image(torch.squeeze(x_in))
-
+    def __init__(self, nimg, wind_size=512, stride=480, scale=2): 
         self.nimg = nimg
 
         H, W, C = nimg.shape
@@ -202,7 +185,7 @@ class WindowsDataset_SR(data.Dataset):
 
 
 def inference_model(model, nimg, wind_size=512, stride=480, scale=2, 
-                    batch_size=1, data_parallel=False, padding=5, manager=None, add_noise=None, blur=False):
+                    batch_size=1, data_parallel=False, padding=5, manager=None, add_noise=None):
     """
     Run sliding window on data using the sisr model.
     
@@ -228,7 +211,7 @@ def inference_model(model, nimg, wind_size=512, stride=480, scale=2,
     H,W,C=nimg.shape
     
     # init dataset 
-    dataset = WindowsDataset_SR(nimg, wind_size, stride, scale, blur)
+    dataset = WindowsDataset_SR(nimg, wind_size, stride, scale)
     
     # dataloader
     dataloader = torch.utils.data.DataLoader(dataset, batch_size)
@@ -322,7 +305,7 @@ def load_msrn_model(weights_path=None, cuda='0',n_scale=3):
 def process_file_msrn(
     nimg, model, compress=True, out_win=256,
     wind_size=512, stride=480, batch_size=1,
-    scale=2, padding=5, manager=None, add_noise = None, blur=False
+    scale=2, padding=5, manager=None, add_noise = None
 ):
     
     # nimg = inria image at 0.3
@@ -346,7 +329,7 @@ def process_file_msrn(
         model, nimg,
         wind_size=wind_size, stride=stride,
         scale=scale, batch_size=batch_size,
-        manager=manager, add_noise=add_noise, blur=blur
+        manager=manager, add_noise=add_noise
     ) # you can add noise during inference to get smoother results (try from 0.1 to 0.3; the higher the smoother effect!) 
 
     result = result[2*padding:-2*padding,2*padding:-2*padding]

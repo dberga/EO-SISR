@@ -124,20 +124,20 @@ class SRImplicitDownsampled(Dataset):
         random_crop = kornia.augmentation.RandomCrop(crop_size, )
         crop_hr_Bdim = random_crop(img)
         if self.blur == True:
-            try: # todo: check this
-                blurred = blur_image(crop_hr_Bdim)
-            except:
-                sigma = 0.5 * s
-                kernel_size = int(sigma * 3 + 4)
-                if kernel_size == 6:
-                    kernel_size = 7
-                elif kernel_size == 8:
-                    kernel_size = 9
-                elif kernel_size == 10:
-                    kernel_size = 11
-                kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
-                blurred = kornia.filters.filter2d(crop_hr_Bdim, kernel_tensor[None])
+            crop = blur_image(crop_hr_Bdim, s)
+            '''
+            sigma = 0.5 * s
+            kernel_size = int(sigma * 3 + 4)
+            if kernel_size == 6:
+                kernel_size = 7
+            elif kernel_size == 8:
+                kernel_size = 9
+            elif kernel_size == 10:
+                kernel_size = 11
+            kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
+            blurred = kornia.filters.filter2d(crop_hr_Bdim, kernel_tensor[None])
             crop = blurred
+            '''
         else:
             crop = crop_hr_Bdim   
         #######

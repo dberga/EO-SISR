@@ -14,7 +14,7 @@ import torch.nn.functional as F
 def blur_image(image, scale):
     # change image type
     init_type = type(image).__name__
-    if init_type == "ndarray":
+    if "ndarray" in init_type:
         image = pil_image.fromarray(image) # cv2pil, np2pil
     if "Tensor" in init_type:
         img_tensor = deepcopy(image)
@@ -28,7 +28,7 @@ def blur_image(image, scale):
     # change type back
     if "Tensor" not in init_type:
     	image_blur = transforms.ToPILImage()(image_blur.squeeze_(0)) # tensor2pil
-    if init_type == "ndarray":
+    if "ndarray" in init_type:
         image_blur = np.array(image_blur) # pil2cv, pil2np
     return image_blur
 
@@ -38,35 +38,35 @@ def rescale_image(image, scale, interpolation=pil_image.BICUBIC):
         return image
     # change image type
     init_type = type(image).__name__ # PIL.Image.Image
-    if init_type == "ndarray":
+    if "ndarray" in init_type:
         image = pil_image.fromarray(image)
     if "Tensor" in init_type:
-    	image = transforms.ToPILImage()(image.squeeze_(0)) # tensor2pil
+        image = transforms.ToPILImage()(image.squeeze_(0)) # tensor2pil
     # resize (using pil)
     image_resized = image.resize((image.width // scale, image.height // scale), resample=interpolation)
     # change type back
-    if init_type == "ndarray":
+    if "ndarray" in init_type:
     	image_resized = np.array(image_resized)
     elif "Tensor" in init_type:
-        image_resized = transforms.ToPILImage()(image_resized.squeeze_(0))
+        image_resized = transforms.ToTensor()(image_resized).unsqueeze_(0) # pil2tensor
     return image_resized
 
 def rescale_image_wh(image, width, height, interpolation=pil_image.BICUBIC):
     # change image type
     init_type = type(image).__name__ # PIL.Image.Image
-    if init_type == "ndarray":
+    if "ndarray" in init_type:
         image = pil_image.fromarray(image)
     if "Tensor" in init_type:
-    	image = transforms.ToPILImage()(image.squeeze_(0)) # tensor2pil
+        image = transforms.ToPILImage()(image.squeeze_(0)) # tensor2pil
     # check if original size is distinct to target size
     to_resize = not (width == image.width and height == image.height)
     if to_resize: # resize (using pil)
         image_resized = image.resize((width, height), resample=interpolation)
     # change type back
-    if init_type == "ndarray":
+    if "ndarray" in init_type:
         image_resized = np.array(image_resized)
     elif "Tensor" in init_type:
-        image_resized = transforms.ToPILImage()(image_resized.squeeze_(0))
+        image_resized = transforms.ToTensor()(image_resized).unsqueeze_(0) # pil2tensor
     return image_resized
 
 class LRSimulator(object):
