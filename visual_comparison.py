@@ -126,7 +126,7 @@ def visual_comp(
         else:
             plt.show()
 
-from iq_tool_box.quality_metrics.dataloader import Dataset
+from iquaflow.quality_metrics.dataloader import Dataset
 from torch.utils.data import DataLoader
 from sklearn.manifold import TSNE
 

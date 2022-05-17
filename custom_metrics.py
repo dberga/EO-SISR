@@ -21,8 +21,8 @@ import piq
 from metrics.swd import SlicedWassersteinDistance
 
 # iquaflow
-from iq_tool_box.experiments import ExperimentInfo
-from iq_tool_box.metrics import Metric
+from iquaflow.experiments import ExperimentInfo
+from iquaflow.metrics import Metric
 
 # Custom Transforms
 from custom_transforms import blur_image, rescale_image, rescale_image_wh

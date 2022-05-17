@@ -3,14 +3,13 @@ import shutil
 import mlflow
 from glob import glob
 
-## update iquaflow with "pip install git+git@github.com:satellogic/iquaflow.git"
-## old rebase (iq_tool_box): "pip install git+https://gitlab+deploy-token-45:FKSA3HpmgUoxa5RZ69Cf@git.satellogic.team/iqf/iqf_tool_box@rebase-before-iquaflow"
-from iq_tool_box.datasets import DSWrapper
-from iq_tool_box.experiments import ExperimentInfo, ExperimentSetup
-from iq_tool_box.experiments.experiment_visual import ExperimentVisual
-from iq_tool_box.experiments.task_execution import PythonScriptTaskExecution
-from iq_tool_box.metrics import RERMetric, SNRMetric # RER name to be changed to SharpnessMetric
-from iq_tool_box.quality_metrics import ScoreMetrics, RERMetrics, SNRMetrics, GaussianBlurMetrics, NoiseSharpnessMetrics, GSDMetrics
+## update iquaflow with "pip3 install git+https://ACCESSTOKEN@github.com/satellogic/iquaflow.git"
+from iquaflow.datasets import DSWrapper
+from iquaflow.experiments import ExperimentInfo, ExperimentSetup
+from iquaflow.experiments.experiment_visual import ExperimentVisual
+from iquaflow.experiments.task_execution import PythonScriptTaskExecution
+from iquaflow.metrics import SharpnessMetric, SNRMetric
+from iquaflow.quality_metrics import ScoreMetrics, RERMetrics, SNRMetrics, GaussianBlurMetrics, NoiseSharpnessMetrics, GSDMetrics
 
 from custom_modifiers import DSModifierLR, DSModifierFake, DSModifierMSRN, DSModifierFSRCNN,  DSModifierLIIF, DSModifierESRGAN, DSModifierCAR, DSModifierSRGAN
 from custom_metrics import SimilarityMetrics
@@ -53,11 +52,19 @@ if plot_sne:
     plotSNE(database_name, images_path, (232,232), 6e4, True, True, "plots/")
 
 #List of modifications that will be applied to the original dataset:
+#List of modifications that will be applied to the original dataset:
 ds_modifiers_list = [
+    DSModifierLR( params={
+        'zoom': settings_zoom,
+        'blur': settings_lr_blur,
+        'resize_preprocess': settings_resize_preprocess,
+        'resize_postprocess': settings_resize_postprocess,
+    }),
     DSModifierFSRCNN( params={
         'config':"test_scale3.json",
         'model':"FSRCNN_1to033_x3_blur/best.pth",
         'blur': settings_lr_blur,
+        'zoom': settings_zoom,
         'resize_preprocess': settings_resize_preprocess,
         'resize_postprocess': settings_resize_postprocess,
     } ),
@@ -74,17 +81,17 @@ ds_modifiers_list = [
         'resize_postprocess': settings_resize_postprocess,
     } ),
     DSModifierMSRN( params={
-    'zoom':settings_zoom,
     'model':"MSRN_nonoise/MSRN_1to033/model_epoch_1500.pth",
     'compress': False,
     'add_noise': None,
+    'zoom': settings_zoom,
     'blur': settings_lr_blur,
     'resize_preprocess': settings_resize_preprocess,
     'resize_postprocess': settings_resize_postprocess,
     } ),
     DSModifierESRGAN( params={
-        'zoom':settings_zoom,
         'model':"ESRGAN_1to033_x3_blur/net_g_latest.pth",
+        'zoom':settings_zoom,
         'blur': settings_lr_blur,
         'resize_preprocess': settings_resize_preprocess,
         'resize_postprocess': settings_resize_postprocess,
@@ -103,20 +110,15 @@ ds_modifiers_list = [
         'config0':"LIIF_config.json",
         'config1':"test_liif.yaml",
         'model':"LIIF_blur/epoch-best.pth",
+        'zoom': settings_zoom,
         'blur': settings_lr_blur,
         'resize_preprocess': settings_resize_preprocess,
         'resize_postprocess': settings_resize_postprocess,
     } ),
-    DSModifierLR( params={
-        'zoom':settings_zoom,
-        'blur': settings_lr_blur,
-        'resize_preprocess': settings_resize_preprocess,
-        'resize_postprocess': settings_resize_postprocess,
-    }),
 ]
 
 # adding fake modifier of original images (GT)
-ds_modifiers_list.append(DSModifierFake(name="GT-HR",images_dir=images_path))
+ds_modifiers_list.append(DSModifierFake(name="HR",images_dir=images_path))
 
 # check existing modified images and replace already processed modifiers by DSModifierFake (only read images)
 if use_fake_modifiers: 
@@ -130,7 +132,7 @@ if use_fake_modifiers:
         if len(os.listdir(sr_dir)) == len(os.listdir(images_path)) and sr_name in list(ds_modifiers_indexes_dict.keys()):
             index_modifier = ds_modifiers_indexes_dict[sr_name]
             ds_modifiers_list[index_modifier]=DSModifierFake(name=sr_name,images_dir = sr_dir,params = {"modifier": sr_name})
-
+  
 #Define path of the training script
 python_ml_script_path = 'sr.py'
 
@@ -199,15 +201,16 @@ __ = experiment_info.apply_metric_per_run(
      ds_wrapper.json_annotations,
  )
 
-print('Calculating RER Metric...')
+print('Calculating RER, MTF, FWHM Metrics...')
 
 _ = experiment_info.apply_metric_per_run(
-    RERMetric(
+    SharpnessMetric(
         experiment_info,
-        win=16,
         stride=16,
         ext="tif",
-        n_jobs=15
+        parallel=True,
+        metrics=["RER", "FWHM", "MTF"],
+        njobs=4
     ),
     ds_wrapper.json_annotations,
 )
@@ -228,12 +231,12 @@ __ = experiment_info.apply_metric_per_run(
 
 df = experiment_info.get_df(
     ds_params=["modifier"],
-    metrics=['ssim','psnr','swd','snr_median','snr_mean','fid','rer_0','rer_1','rer_2'],
+    metrics=['ssim','psnr','swd','snr_median','snr_mean','fid','RER','FWHM','MTF'],
     dropna=False
 )
 print(df)
 df.to_csv(f'./{experiment_name}_metrics.csv')
-scatter_plots(df, [['ssim','psnr'],['fid','swd'],['rer_0','snr_mean'],['snr_mean','psnr']], True, "plots/")
+scatter_plots(df, [['ssim','psnr'],['fid','swd'],['RER','snr_mean'],['snr_mean','psnr'],['RER','MTF'],['RER','FWHM']], True, "plots/")
 
 print('Calculating Regressor Quality Metrics...') #default configurations
 _ = experiment_info.apply_metric_per_run(ScoreMetrics(), ds_wrapper.json_annotations)
@@ -268,9 +271,9 @@ df = experiment_info.get_df(
             "snr_median",
             "snr_mean",
             "fid",
-            "rer_0",
-            "rer_1",
-            "rer_2",
+            "RER",
+            "FWHM",
+            "MTF",
             "sigma",
             "rer",
             "snr",
@@ -281,7 +284,7 @@ df = experiment_info.get_df(
 )
 print(df)
 df.to_csv(f'./{experiment_name}.csv')
-scatter_plots(df, [['sigma','rer_0'],['rer','rer_0'],['sharpness','rer_0'],['snr','snr_mean'],['snr','psnr'],['scale','rer'],['scale','snr'],['score','psnr'],['score','ssim'],['score','swd'],['score','snr_median'],['score','rer_0'],['score','rer_1'],['score','rer_2']], True, "plots/")
+scatter_plots(df, [['sigma','RER'],['sigma','MTF'],['sigma','FWHM'],['rer','RER'],['rer','MTF'],['rer','FWHM'],['sharpness','RER'],['sharpness','MTF'],['sharpness','FWHM'],['snr','snr_mean'],['snr','psnr'],['scale','rer'],['scale','snr'],['score','psnr'],['score','ssim'],['score','swd'],['score','snr_median'],['score','RER'],['score','FWHM'],['score','MTF']], True, "plots/")
 
 ev = ExperimentVisual(df, None)
 
@@ -323,22 +326,22 @@ ev.visualize(
 ev.visualize(
     plot_kind="bars",
     xvar="ds_modifier",
-    yvar="rer_0",
+    yvar="RER",
     legend_var='psnr',
     title=""
 )
 ev.visualize(
     plot_kind="bars",
     xvar="ds_modifier",
-    yvar="rer_1",
-    legend_var='rer_0',
+    yvar="FWHM",
+    legend_var='RER',
     title=""
 )
 ev.visualize(
     plot_kind="bars",
     xvar="ds_modifier",
-    yvar="rer_2",
-    legend_var='rer_0',
+    yvar="MTF",
+    legend_var='RER',
     title=""
 )
 ev.visualize(
@@ -380,6 +383,6 @@ ev.visualize(
     plot_kind="bars",
     xvar="ds_modifier",
     yvar="rer",
-    legend_var='rer_0',
+    legend_var='RER',
     title=""
 )
