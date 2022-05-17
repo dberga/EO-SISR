@@ -1,27 +1,33 @@
+# SiSR Execution settings
+plot_sne = False                    # t-SNE plot? (requires a bit of RAM)
+plot_visual_comp = False            # visual comparison?
+plot_metrics_comp = False           # metrics comparison?
+use_fake_modifiers = False          # read existing sr output data files instead of modifying?
+use_existing_metrics = False        # read existing metrics output data files instead of processing them?
+settings_lr_blur = False            # blur right before modification?
+settings_resize_preprocess = True   # resize right before modification?
+settings_resize_postprocess = False # resize right after modification?
+settings_zoom = 3                   # scale?
+
+# load_ext autoreload
+#autoreload 2
 import os
 import shutil
 import mlflow
+import pandas as pd
 from glob import glob
 
 ## update iquaflow with "pip3 install git+https://ACCESSTOKEN@github.com/satellogic/iquaflow.git"
 from iquaflow.datasets import DSWrapper
 from iquaflow.experiments import ExperimentInfo, ExperimentSetup
-from iquaflow.experiments.experiment_visual import ExperimentVisual
 from iquaflow.experiments.task_execution import PythonScriptTaskExecution
 from iquaflow.metrics import SharpnessMetric, SNRMetric
 from iquaflow.quality_metrics import ScoreMetrics, RERMetrics, SNRMetrics, GaussianBlurMetrics, NoiseSharpnessMetrics, GSDMetrics
 
 from custom_modifiers import DSModifierLR, DSModifierFake, DSModifierMSRN, DSModifierFSRCNN,  DSModifierLIIF, DSModifierESRGAN, DSModifierCAR, DSModifierSRGAN
 from custom_metrics import SimilarityMetrics
-from visual_comparison import visual_comp, scatter_plots, plotSNE
+from visual_comparison import visual_comp, metric_comp, plotSNE
 
-# SiSR Execution settings
-plot_sne = False                     # t-SNE plot? (requires a bit of RAM)
-use_fake_modifiers = False          # read existing sr output data files instead of modifying?
-settings_lr_blur = False            # blur right before modification?
-settings_resize_preprocess = True   # resize right before modification?
-settings_resize_postprocess = False # resize right after modification?
-settings_zoom = 3                   # scale?
 
 #Define path of the original(reference) dataset
 data_path = f"./Data/test-ds"
@@ -51,7 +57,6 @@ except:
 if plot_sne:
     plotSNE(database_name, images_path, (232,232), 6e4, True, True, "plots/")
 
-#List of modifications that will be applied to the original dataset:
 #List of modifications that will be applied to the original dataset:
 ds_modifiers_list = [
     DSModifierLR( params={
@@ -156,265 +161,144 @@ experiment.execute()
 
 experiment_info = ExperimentInfo(experiment_name)
 
-print('Visualizing examples')
+if plot_visual_comp:
+    print('Visualizing examples')
 
-lst_folders_mod = [os.path.join(data_path+'#'+ds_modifier._get_name(),images_folder) for ds_modifier in ds_modifiers_list]
-lst_labels_mod = [ds_modifier._get_name().replace("sisr+","").split("_")[0] for ds_modifier in ds_modifiers_list] # authomatic readout from folders
+    lst_folders_mod = [os.path.join(data_path+'#'+ds_modifier._get_name(),images_folder) for ds_modifier in ds_modifiers_list]
+    lst_labels_mod = [ds_modifier._get_name().replace("sisr+","").split("_")[0] for ds_modifier in ds_modifiers_list] # authomatic readout from folders
 
-visual_comp(lst_folders_mod, lst_labels_mod, True, "comparison/")
+    visual_comp(lst_folders_mod, lst_labels_mod, True, "comparison/")
 
-print('Calculating similarity metrics...')
+# Selected Metrics
+similarity_metrics = ['ssim','psnr','swd','fid', 'ms_ssim','haarpsi','gmsd','mdsi']
+noise_metrics = ['snr_median','snr_mean']
+sharpness_metrics = ['RER','FWHM','MTF']
+regressor_quality_metrics = ['sigma','snr','rer','sharpness','scale','score']
+all_metrics = similarity_metrics+noise_metrics+sharpness_metrics+regressor_quality_metrics
 
-win = 28
-_ = experiment_info.apply_metric_per_run(
-    SimilarityMetrics(
-        experiment_info,
-        n_jobs               = 4,
-        ext                  = 'tif',
-        n_pyramids           = 1,
-        slice_size           = 7,
-        n_descriptors        = win*2,
-        n_repeat_projection  = win,
-        proj_per_repeat      = 4,
-        device               = 'cpu',
-        return_by_resolution = False,
-        pyramid_batchsize    = win,
-        use_liif_loader      = True,
-        zoom                 = settings_zoom,
-        blur                 = settings_lr_blur,
-        resize_preprocess    = settings_resize_preprocess,
-    ),
-    ds_wrapper.json_annotations,
-)
-
-print('Calculating SNR Metric...')
-
-__ = experiment_info.apply_metric_per_run(
-     SNRMetric(
-         experiment_info,
-         ext="tif",
-         method="HB",
-         patch_size=30, #patch_sizes=[30]
-         #confidence_limit=50.0,
-         #n_jobs=15
-     ),
-     ds_wrapper.json_annotations,
- )
-
-print('Calculating RER, MTF, FWHM Metrics...')
-
-_ = experiment_info.apply_metric_per_run(
-    SharpnessMetric(
-        experiment_info,
-        stride=16,
-        ext="tif",
-        parallel=True,
-        metrics=["RER", "FWHM", "MTF"],
-        njobs=4
-    ),
-    ds_wrapper.json_annotations,
-)
-
-print('Calculating SNR Metric...')
-
-__ = experiment_info.apply_metric_per_run(
-     SNRMetric(
-         experiment_info,
-         ext="tif",
-         method="HB",
-         patch_size=30, #patch_sizes=[30]
-         #confidence_limit=50.0,
-         #n_jobs=15
-     ),
-     ds_wrapper.json_annotations,
- )
-
-df = experiment_info.get_df(
-    ds_params=["modifier"],
-    metrics=['ssim','psnr','swd','ms_ssim','haarpsi','gmsd','mdsi','snr_median','snr_mean','fid','RER','FWHM','MTF'],
-    dropna=False
-)
+print('Calculating similarity metrics...'+",".join(similarity_metrics))
+path_similarity_metrics = f'./{experiment_name}_similarity_metrics.csv'
+if use_existing_metrics and os.path.exists(path_similarity_metrics):
+    df = pd.read(path_similarity_metrics)
+else:
+    win = 28
+    _ = experiment_info.apply_metric_per_run(
+        SimilarityMetrics(
+            experiment_info,
+            n_jobs               = 4,
+            ext                  = 'tif',
+            n_pyramids           = 1,
+            slice_size           = 7,
+            n_descriptors        = win*2,
+            n_repeat_projection  = win,
+            proj_per_repeat      = 4,
+            device               = 'cuda:0', #'cpu',
+            return_by_resolution = False,
+            pyramid_batchsize    = win,
+            use_liif_loader      = True,
+            zoom                 = settings_zoom,
+            blur                 = settings_lr_blur,
+            resize_preprocess    = settings_resize_preprocess,
+        ),
+        ds_wrapper.json_annotations,
+    )
+    df = experiment_info.get_df(
+        ds_params=["modifier"],
+        metrics=similarity_metrics,
+        dropna=False
+    )
+    df.to_csv(path_similarity_metrics)
 print(df)
-df.to_csv(f'./{experiment_name}_metrics.csv')
-scatter_plots(df, [['ssim','psnr'],['fid','swd'],['RER','snr_mean'],['snr_mean','psnr'],['RER','MTF'],['RER','FWHM']], True, "plots/")
+if plot_metrics_comp:
+    metric_comp(df,similarity_metrics,True,"plots/")
 
-print('Calculating Regressor Quality Metrics...') #default configurations
-_ = experiment_info.apply_metric_per_run(ScoreMetrics(), ds_wrapper.json_annotations)
-_ = experiment_info.apply_metric_per_run(RERMetrics(), ds_wrapper.json_annotations)
-_ = experiment_info.apply_metric_per_run(SNRMetrics(), ds_wrapper.json_annotations)
-_ = experiment_info.apply_metric_per_run(GaussianBlurMetrics(), ds_wrapper.json_annotations)
-_ = experiment_info.apply_metric_per_run(NoiseSharpnessMetrics(), ds_wrapper.json_annotations)
-_ = experiment_info.apply_metric_per_run(GSDMetrics(), ds_wrapper.json_annotations)
 
-df = experiment_info.get_df(
-    ds_params=["modifier"],
-    metrics=[
-            "sigma",
-            "snr",
-            "rer",
-            "sharpness",
-            "scale",
-            "score"
-        ]
-)
+print('Calculating Noise Metrics...'+",".join(noise_metrics))
+path_noise_metrics = f'./{experiment_name}_noise_metrics.csv'
+if use_existing_metrics and os.path.exists(path_noise_metrics):
+    df = pd.read(path_noise_metrics)
+else:
+    __ = experiment_info.apply_metric_per_run(
+         SNRMetric(
+             experiment_info,
+             ext="tif",
+             method="HB",
+             patch_size=30, #patch_sizes=[30]
+             #confidence_limit=50.0,
+             #n_jobs=15
+         ),
+         ds_wrapper.json_annotations,
+     )
+    df = experiment_info.get_df(
+        ds_params=["modifier"],
+        metrics=noise_metrics,
+        dropna=False
+    )
+    df.to_csv(path_noise_metrics)
 print(df)
-df.to_csv(f'./{experiment_name}_regressor.csv')
-scatter_plots(df, [['sigma','rer'],['sigma','sharpness'],['rer','snr'],['sharpness','rer'],['sigma','scale'],['snr','scale']], True, "plots/")
+if plot_metrics_comp:
+    metric_comp(df,noise_metrics,True,"plots/")
 
-print("Comparing Metrics with Regressed Quality Metrics")
-df = experiment_info.get_df(
-    ds_params=["modifier"],
-    metrics=[
-            "ssim",
-            "psnr",
-            "mdsi",
-            "ms_ssim",
-            "haarpsi",
-            "gmsd",
-            "swd",
-            "snr_median",
-            "snr_mean",
-            "fid",
-            "RER",
-            "FWHM",
-            "MTF",
-            "sigma",
-            "rer",
-            "snr",
-            "sharpness",
-            "scale",
-            "score"
-        ]
-)
+print('Calculating Sharpness Metrics...'+",".join(sharpness_metrics))
+path_sharpness_metrics = f'./{experiment_name}_sharpness_metrics.csv'
+if use_existing_metrics and os.path.exists(path_sharpness_metrics):
+    df = pd.read(path_similarity_metrics)
+else:
+    _ = experiment_info.apply_metric_per_run(
+        SharpnessMetric(
+            experiment_info,
+            stride=16,
+            ext="tif",
+            parallel=True,
+            metrics=["RER", "FWHM", "MTF"],
+            njobs=4
+        ),
+        ds_wrapper.json_annotations,
+    )
+    df = experiment_info.get_df(
+        ds_params=["modifier"],
+        metrics=sharpness_metrics,
+        dropna=False
+    )
+    df.to_csv(path_sharpness_metrics)
 print(df)
-df.to_csv(f'./{experiment_name}.csv')
-scatter_plots(df, [['sigma','RER'],['sigma','MTF'],['sigma','FWHM'],['rer','RER'],['rer','MTF'],['rer','FWHM'],['sharpness','RER'],['sharpness','MTF'],['sharpness','FWHM'],['snr','snr_mean'],['snr','psnr'],['scale','rer'],['scale','snr'],['score','psnr'],['score','ssim'],['score','swd'],['score','snr_median'],['score','RER'],['score','FWHM'],['score','MTF']], True, "plots/")
+if plot_metrics_comp:
+    metric_comp(df,sharpness_metrics,True,"plots/")
 
-ev = ExperimentVisual(df, None)
 
-ev.visualize(
-    plot_kind="bars",
-    xvar="ds_modifier",
-    yvar="score",
-    legend_var='psnr',
-    title=""
-)
-ev.visualize(
-    plot_kind="bars",
-    xvar="ds_modifier",
-    yvar="ssim",
-    legend_var='psnr',
-    title=""
-)
-ev.visualize(
-    plot_kind="bars",
-    xvar="ds_modifier",
-    yvar="ms_ssim",
-    legend_var='psnr',
-    title=""
-)
-ev.visualize(
-    plot_kind="bars",
-    xvar="ds_modifier",
-    yvar="haarpsi",
-    legend_var='psnr',
-    title=""
-)
-ev.visualize(
-    plot_kind="bars",
-    xvar="ds_modifier",
-    yvar="mdsi",
-    legend_var='psnr',
-    title=""
-)
-ev.visualize(
-    plot_kind="bars",
-    xvar="ds_modifier",
-    yvar="gmsd",
-    legend_var='psnr',
-    title=""
-)
-ev.visualize(
-    plot_kind="bars",
-    xvar="ds_modifier",
-    yvar="swd",
-    legend_var='psnr',
-    title=""
-)
-ev.visualize(
-    plot_kind="bars",
-    xvar="ds_modifier",
-    yvar="fid",
-    legend_var='psnr',
-    title=""
-)
-ev.visualize(
-    plot_kind="bars",
-    xvar="ds_modifier",
-    yvar="snr_mean",
-    legend_var='snr_median',
-    title=""
-)
-ev.visualize(
-    plot_kind="bars",
-    xvar="ds_modifier",
-    yvar="RER",
-    legend_var='psnr',
-    title=""
-)
-ev.visualize(
-    plot_kind="bars",
-    xvar="ds_modifier",
-    yvar="FWHM",
-    legend_var='RER',
-    title=""
-)
-ev.visualize(
-    plot_kind="bars",
-    xvar="ds_modifier",
-    yvar="MTF",
-    legend_var='RER',
-    title=""
-)
-ev.visualize(
-    plot_kind="bars",
-    xvar="ds_modifier",
-    yvar="sigma",
-    legend_var='psnr',
-    title=""
-)
-ev.visualize(
-    plot_kind="bars",
-    xvar="ds_modifier",
-    yvar="rer",
-    legend_var='psnr',
-    title=""
-)
-ev.visualize(
-    plot_kind="bars",
-    xvar="ds_modifier",
-    yvar="snr",
-    legend_var='psnr',
-    title=""
-)
-ev.visualize(
-    plot_kind="bars",
-    xvar="ds_modifier",
-    yvar="scale",
-    legend_var='psnr',
-    title=""
-)
-ev.visualize(
-    plot_kind="bars",
-    xvar="ds_modifier",
-    yvar="snr",
-    legend_var='snr_mean',
-    title=""
-)
-ev.visualize(
-    plot_kind="bars",
-    xvar="ds_modifier",
-    yvar="rer",
-    legend_var='RER',
-    title=""
-)
+print('Calculating Regressor Quality Metrics...'+",".join(regressor_quality_metrics)) #default configurations
+path_regressor_quality_metrics = f'./{experiment_name}_regressor_quality_metrics.csv'
+if use_existing_metrics and os.path.exists(path_regressor_quality_metrics):
+    df = pd.read(path_regressor_quality_metrics)
+else:
+    _ = experiment_info.apply_metric_per_run(ScoreMetrics(), ds_wrapper.json_annotations)
+    _ = experiment_info.apply_metric_per_run(RERMetrics(), ds_wrapper.json_annotations)
+    _ = experiment_info.apply_metric_per_run(SNRMetrics(), ds_wrapper.json_annotations)
+    _ = experiment_info.apply_metric_per_run(GaussianBlurMetrics(), ds_wrapper.json_annotations)
+    _ = experiment_info.apply_metric_per_run(NoiseSharpnessMetrics(), ds_wrapper.json_annotations)
+    _ = experiment_info.apply_metric_per_run(GSDMetrics(), ds_wrapper.json_annotations)
+    df = experiment_info.get_df(
+        ds_params=["modifier"],
+        metrics=regressor_quality_metrics,
+        dropna=False
+    )
+    df.to_csv(path_regressor_quality_metrics)
+print(df)
+if plot_metrics_comp:
+    metric_comp(df,regressor_quality_metrics,True,"plots/")
+
+
+print("Comparing all Metrics")
+path_all_metrics = f'./{experiment_name}_all_metrics.csv'
+if use_existing_metrics and os.path.exists(path_all_metrics):
+    df = pd.read(path_all_metrics)
+else:
+    df = experiment_info.get_df(
+        ds_params=["modifier"],
+        metrics=all_metrics,
+        dropna=False
+    )
+    df.to_csv(path_all_metrics)
+print(df)
+if plot_metrics_comp:
+    metric_comp(df,all_metrics,True,"plots/")

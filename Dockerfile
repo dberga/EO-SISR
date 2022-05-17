@@ -39,7 +39,8 @@ RUN pip3 install pip --upgrade
 WORKDIR /sisr
 #RUN pip3 install git+ssh://git.satellogic.team:iqf/iqf_tool_box.git
 #RUN pip3 install git+https://gitlab+deploy-token-45:FKSA3HpmgUoxa5RZ69Cf@git.satellogic.team/iqf/iqf_tool_box
-RUN pip install git+https://gitlab+deploy-token-45:FKSA3HpmgUoxa5RZ69Cf@git.satellogic.team/iqf/iqf_tool_box@rebase-before-iquaflow
+#RUN pip install git+https://gitlab+deploy-token-45:FKSA3HpmgUoxa5RZ69Cf@git.satellogic.team/iqf/iqf_tool_box@rebase-before-iquaflow
+RUN pip3 install git+https://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@github.com/satellogic/iquaflow.git@dberga-regressor
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt

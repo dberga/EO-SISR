@@ -8,6 +8,15 @@ import matplotlib.pyplot as plt
 from glob import glob
 from PIL import Image as pil_image
 
+# metric_comp
+from iquaflow.experiments.experiment_visual import ExperimentVisual
+import itertools
+
+# plotSNE
+from iquaflow.quality_metrics.dataloader import Dataset
+from torch.utils.data import DataLoader
+from sklearn.manifold import TSNE
+
 #########################
 # Visual comparison
 #########################
@@ -126,11 +135,21 @@ def visual_comp(
         else:
             plt.show()
 
-from iquaflow.quality_metrics.dataloader import Dataset
-from torch.utils.data import DataLoader
-from sklearn.manifold import TSNE
+def metric_comp(df, selected_metrics,savefig = False,plots_folder = "plots/"):
+    ev = ExperimentVisual(df, None)
+    reference_metric = selected_metrics[0]
+    for metric in selected_metrics:
+        ev.visualize(
+            plot_kind="bars",
+            xvar="ds_modifier",
+            yvar=metric,
+            legend_var=reference_metric,
+            title=""
+        )
+    metrics_comparison = list(itertools.combinations(selected_metrics, 2))
+    scatter_plots(df, metrics_comparison, savefig, "plots/")
 
-def plotSNE(dataset_name="test-ds", images_folder="./Data/test-ds/test/", img_size=(232,232),shm_limit=6e4, crop = True, savefig = False,plots_folder = "plots/"):
+def plotSNE(dataset_name="./Data/test-ds", images_folder="./Data/test-ds/test/", img_size=(232,232),shm_limit=6e4, crop = True, savefig = False,plots_folder = "plots/"):
     # create data loader
     dataset = Dataset(
         "whole", # split
