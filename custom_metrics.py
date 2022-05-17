@@ -60,11 +60,12 @@ class SimilarityMetrics( Metric ):
         self.metric_names = [
             'ssim',
             'psnr',
-            #'gmsd',
-            #'mdsi',
-            #'haarpsi',
+            'gmsd',
+            'mdsi',
+            'haarpsi',
             'swd',
-            'fid'
+            'fid',
+            'ms_ssim',
         ]
         self.experiment_info = experiment_info
         
@@ -209,7 +210,11 @@ class SimilarityMetrics( Metric ):
             "ssim":None,
             "psnr":None,
             "swd":None,
-            "fid":None
+            "fid":None,
+            "ms_ssim":None,
+            'mdsi':None,
+            'haarpsi':None,
+            'gmsd':None,
         }
 
         if pred.size()!=gt.size():
@@ -231,17 +236,19 @@ class SimilarityMetrics( Metric ):
         else:
 
             pred_for_metrics = pred
-        try:
-            results_dict = {
-                "ssim":piq.ssim(pred_for_metrics,gt).item(),
-                "psnr":piq.psnr(pred_for_metrics,gt).item(),
-                "fid":np.sum( [
-                    fid( torch.squeeze(pred_for_metrics)[i,...], torch.squeeze(gt)[i,...] ).item()
-                    for i in range( pred_for_metrics.shape[1] )
-                    ] ) / pred_for_metrics.shape[1]
-            }
-        except:
-            import pdb; pdb.set_trace()
+            
+        results_dict = {
+            "ssim":piq.ssim(pred_for_metrics,gt).item(),
+            "psnr":piq.psnr(pred_for_metrics,gt).item(),
+            "ms_ssim":piq.multi_scale_ssim(pred_for_metrics,gt).item(),
+            "mdsi":piq.mdsi(pred_for_metrics,gt).item(),
+            "haarpsi":piq.haarpsi(pred_for_metrics,gt).item(),
+            "gmsd":piq.gmsd(pred_for_metrics,gt).item(),
+            "fid":np.sum( [
+                fid( torch.squeeze(pred_for_metrics)[i,...], torch.squeeze(gt)[i,...] ).item()
+                for i in range( pred_for_metrics.shape[1] )
+                ] ) / pred_for_metrics.shape[1]
+        }
         # Make gt even
         if gt.shape[-2]%2!=0 or gt.shape[-1]%2!=0 : # gt size is odd
             new_gt_h = gt.shape[-2]+1 if (gt.shape[-2]+1)%2 == 0 else gt.shape[-2]

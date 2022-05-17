@@ -28,7 +28,7 @@ import cv2
 from custom_transforms import blur_image, rescale_image, rescale_image_wh
 
 # iquaflow
-from iq_tool_box.datasets import DSModifier
+from iquaflow.datasets import DSModifier
 
 
 #########################

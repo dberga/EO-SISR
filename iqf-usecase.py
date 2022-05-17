@@ -231,7 +231,7 @@ __ = experiment_info.apply_metric_per_run(
 
 df = experiment_info.get_df(
     ds_params=["modifier"],
-    metrics=['ssim','psnr','swd','snr_median','snr_mean','fid','RER','FWHM','MTF'],
+    metrics=['ssim','psnr','swd','ms_ssim','haarpsi','gmsd','mdsi','snr_median','snr_mean','fid','RER','FWHM','MTF'],
     dropna=False
 )
 print(df)
@@ -267,6 +267,10 @@ df = experiment_info.get_df(
     metrics=[
             "ssim",
             "psnr",
+            "mdsi",
+            "ms_ssim",
+            "haarpsi",
+            "gmsd",
             "swd",
             "snr_median",
             "snr_mean",
@@ -299,6 +303,34 @@ ev.visualize(
     plot_kind="bars",
     xvar="ds_modifier",
     yvar="ssim",
+    legend_var='psnr',
+    title=""
+)
+ev.visualize(
+    plot_kind="bars",
+    xvar="ds_modifier",
+    yvar="ms_ssim",
+    legend_var='psnr',
+    title=""
+)
+ev.visualize(
+    plot_kind="bars",
+    xvar="ds_modifier",
+    yvar="haarpsi",
+    legend_var='psnr',
+    title=""
+)
+ev.visualize(
+    plot_kind="bars",
+    xvar="ds_modifier",
+    yvar="mdsi",
+    legend_var='psnr',
+    title=""
+)
+ev.visualize(
+    plot_kind="bars",
+    xvar="ds_modifier",
+    yvar="gmsd",
     legend_var='psnr',
     title=""
 )
