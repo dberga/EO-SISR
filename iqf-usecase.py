@@ -1,13 +1,17 @@
 # SiSR Execution settings
-plot_sne = False                    # t-SNE plot? (requires a bit of RAM)
-plot_visual_comp = False            # visual comparison?
-plot_metrics_comp = False           # metrics comparison?
-use_fake_modifiers = False          # read existing sr output data files instead of modifying?
-use_existing_metrics = False        # read existing metrics output data files instead of processing them?
-settings_lr_blur = False            # blur right before modification?
-settings_resize_preprocess = True   # resize right before modification?
-settings_resize_postprocess = False # resize right after modification?
-settings_zoom = 3                   # scale?
+plot_sne = False                         # t-SNE plot? (requires a bit of RAM)
+plot_visual_comp = True                  # visual comparison?
+plot_metrics_comp = True                 # metrics comparison?
+use_fake_modifiers = True                # read existing sr output data files instead of modifying?
+use_existing_metrics = True              # read existing metrics output data files instead of processing them?
+compute_similarity_metrics = True        # compute these? 
+compute_noise_metrics = True             # compute these?
+compute_sharpness_metrics = True         # compute these?
+compute_regressor_quality_metrics = True # compute these?
+settings_lr_blur = False                 # blur right before modification?
+settings_resize_preprocess = True        # resize right before modification?
+settings_resize_postprocess = False      # resize right after modification?
+settings_zoom = 3                        # scale?
 
 # load_ext autoreload
 #autoreload 2
@@ -180,7 +184,7 @@ print('Calculating similarity metrics...'+",".join(similarity_metrics))
 path_similarity_metrics = f'./{experiment_name}_similarity_metrics.csv'
 if use_existing_metrics and os.path.exists(path_similarity_metrics):
     df = pd.read(path_similarity_metrics)
-else:
+elif compute_similarity_metrics:
     win = 28
     _ = experiment_info.apply_metric_per_run(
         SimilarityMetrics(
@@ -208,6 +212,8 @@ else:
         dropna=False
     )
     df.to_csv(path_similarity_metrics)
+else:
+    df = pd.DataFrame(0, index=[0], columns=['ds_modifier']+similarity_metrics); # empty df
 print(df)
 if plot_metrics_comp:
     metric_comp(df,similarity_metrics,True,"plots/")
@@ -216,14 +222,14 @@ if plot_metrics_comp:
 print('Calculating Noise Metrics...'+",".join(noise_metrics))
 path_noise_metrics = f'./{experiment_name}_noise_metrics.csv'
 if use_existing_metrics and os.path.exists(path_noise_metrics):
-    df = pd.read(path_noise_metrics)
-else:
+    df = pd.read_csv(path_noise_metrics)
+elif compute_noise_metrics:
     __ = experiment_info.apply_metric_per_run(
          SNRMetric(
              experiment_info,
              ext="tif",
              method="HB",
-             patch_size=30, #patch_sizes=[30]
+             # patch_size=30, #patch_sizes=[30]
              #confidence_limit=50.0,
              #n_jobs=15
          ),
@@ -235,6 +241,8 @@ else:
         dropna=False
     )
     df.to_csv(path_noise_metrics)
+else:
+    df = pd.DataFrame(0, index=[0], columns=['ds_modifier']+noise_metrics); # empty df
 print(df)
 if plot_metrics_comp:
     metric_comp(df,noise_metrics,True,"plots/")
@@ -242,15 +250,15 @@ if plot_metrics_comp:
 print('Calculating Sharpness Metrics...'+",".join(sharpness_metrics))
 path_sharpness_metrics = f'./{experiment_name}_sharpness_metrics.csv'
 if use_existing_metrics and os.path.exists(path_sharpness_metrics):
-    df = pd.read(path_similarity_metrics)
-else:
+    df = pd.read_csv(path_similarity_metrics)
+elif compute_sharpness_metrics:
     _ = experiment_info.apply_metric_per_run(
         SharpnessMetric(
             experiment_info,
             stride=16,
             ext="tif",
             parallel=True,
-            metrics=["RER", "FWHM", "MTF"],
+            metrics=sharpness_metrics,
             njobs=4
         ),
         ds_wrapper.json_annotations,
@@ -261,6 +269,8 @@ else:
         dropna=False
     )
     df.to_csv(path_sharpness_metrics)
+else:
+    df = pd.DataFrame(0, index=[0], columns=['ds_modifier']+sharpness_metrics); # empty df
 print(df)
 if plot_metrics_comp:
     metric_comp(df,sharpness_metrics,True,"plots/")
@@ -269,8 +279,8 @@ if plot_metrics_comp:
 print('Calculating Regressor Quality Metrics...'+",".join(regressor_quality_metrics)) #default configurations
 path_regressor_quality_metrics = f'./{experiment_name}_regressor_quality_metrics.csv'
 if use_existing_metrics and os.path.exists(path_regressor_quality_metrics):
-    df = pd.read(path_regressor_quality_metrics)
-else:
+    df = pd.read_csv(path_regressor_quality_metrics)
+elif compute_regressor_quality_metrics:
     _ = experiment_info.apply_metric_per_run(ScoreMetrics(), ds_wrapper.json_annotations)
     _ = experiment_info.apply_metric_per_run(RERMetrics(), ds_wrapper.json_annotations)
     _ = experiment_info.apply_metric_per_run(SNRMetrics(), ds_wrapper.json_annotations)
@@ -283,6 +293,8 @@ else:
         dropna=False
     )
     df.to_csv(path_regressor_quality_metrics)
+else:
+    df = pd.DataFrame(0, index=[0], columns=['ds_modifier']+regressor_quality_metrics); # empty df
 print(df)
 if plot_metrics_comp:
     metric_comp(df,regressor_quality_metrics,True,"plots/")

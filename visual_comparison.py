@@ -25,11 +25,6 @@ def scatter_plots(df,
     metrics = [
         ['ssim','psnr'],
         ['fid','swd'],
-        ['rer_0','snr_0'],
-        ['rer_0','rer'],
-        ['snr_mean','snr'],
-        ['sigma','rer'],
-        ['sharpness','snr'],
     ],
     savefig = False,
     plots_folder = "plots/"):
@@ -39,22 +34,19 @@ def scatter_plots(df,
         met1, met2 = pair_metrics
 
         fig, ax = plt.subplots()
-
-        marker_lst = []
+        marker_lst = ["X","x","o","s","8","P","s","d"]
 
         for i in df.index:
-
-            if not '#' in df['ds_modifier'][i]:
-                marker = 'X'
-            else:
-                marker = 'o'
+            if len(df['ds_modifier'][i])>1:
+                if "LR" in df['ds_modifier'][i]:
+                    marker = "x"
+                elif "HR" in df['ds_modifier'][i]:
+                    marker = 'X'
+                else:
+                    marker = 'o'
 
             ax.scatter(
-                (
-                    df[met1][i]
-                    if met1!='rer_0'
-                    else np.nanmean([df['rer_0'][i],df['rer_1'][i],df['rer_2'][i]])
-                ),
+                df[met1][i],
                 df[met2][i],
                 s=250.,
                 marker=marker,
@@ -63,14 +55,14 @@ def scatter_plots(df,
                 edgecolors='none'
             )
 
-        ax.set_xlabel(('rer' if met1=='rer_0' else met1))
+        ax.set_xlabel(met1)
         ax.set_ylabel(met2)
         ax.legend(title='Algorithms', bbox_to_anchor=(1.05, 1), loc='upper left')
         ax.grid(True)
         
         if savefig is True:
             os.makedirs(plots_folder,exist_ok=True)
-            plt.savefig(os.path.join(plots_folder,"scatter_"+met1+"_"+met2+".png"))
+            plt.savefig(os.path.join(plots_folder,"scatter_"+met1+"_"+met2+".png"),facecolor=fig.get_facecolor())
         else:
             plt.show()
 
