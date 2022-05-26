@@ -482,7 +482,7 @@ elif compute_similarity_metrics and compute_noise_metrics and compute_sharpness_
     )
     df.to_csv(path_all_metrics)
 else:
-    df = pd.concat[df_results]
+    df = pd.concat(df_results)
     # df = pd.DataFrame(0, index=[0], columns=['ds_modifier']+all_metrics); # empty df
 
 
