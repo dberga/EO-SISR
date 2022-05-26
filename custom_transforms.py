@@ -62,6 +62,8 @@ def rescale_image_wh(image, width, height, interpolation=pil_image.BICUBIC):
     to_resize = not (width == image.width and height == image.height)
     if to_resize: # resize (using pil)
         image_resized = image.resize((width, height), resample=interpolation)
+    else:
+        image_resized = image
     # change type back
     if "ndarray" in init_type:
         image_resized = np.array(image_resized)
