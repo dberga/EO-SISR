@@ -22,6 +22,7 @@
 plot_sne = False                         # t-SNE plot? (requires a bit of RAM)
 plot_visual_comp = True                  # visual comparison?
 plot_metrics_comp = True                 # metrics comparison?
+savefig = True 				 # save fig or show in notebook
 use_fake_modifiers = False               # read existing sr output data files instead of modifying?
 use_existing_metrics = True              # read existing metrics output data files instead of processing them?
 compute_similarity_metrics = True        # compute these? 
@@ -102,14 +103,6 @@ try:
     [shutil.rmtree(x) for x in glob(os.path.join(os.getcwd(), "**", '__pycache__'), recursive=True)]
 except:
     pass
-
-
-# In[ ]:
-
-
-# Save Figs if python extension, show if notebook
-_, extension = os.path.splitext(__file__)
-savefig = False if extension == "ipynb" else True
 
 
 # In[ ]:
