@@ -22,8 +22,8 @@
 plot_sne = False                         # t-SNE plot? (requires a bit of RAM)
 plot_visual_comp = True                  # visual comparison?
 plot_metrics_comp = True                 # metrics comparison?
-savefig = True 				 # save fig or show in notebook
-use_fake_modifiers = False               # read existing sr output data files instead of modifying?
+savefig = False                          # save fig or show in notebook
+use_fake_modifiers = True                # read existing sr output data files instead of modifying?
 use_existing_metrics = True              # read existing metrics output data files instead of processing them?
 compute_similarity_metrics = True        # compute these? 
 compute_noise_metrics = True             # compute these?
@@ -264,7 +264,6 @@ similarity_metrics = ['ssim','psnr','swd','fid', 'ms_ssim','haarpsi','gmsd','mds
 noise_metrics = ['snr_median','snr_mean']
 sharpness_metrics = ['RER', 'MTF', 'FWHM']
 regressor_quality_metrics = ['sigma','snr','rer','sharpness','scale','score']
-all_metrics = similarity_metrics+noise_metrics+sharpness_metrics+regressor_quality_metrics
 
 
 # In[ ]:
@@ -455,6 +454,12 @@ else:
 # In[ ]:
 
 
+df_results.append(df)
+
+
+# In[ ]:
+
+
 df
 
 
@@ -470,6 +475,7 @@ if plot_metrics_comp:
 # In[ ]:
 
 
+all_metrics = similarity_metrics+noise_metrics+sharpness_metrics+regressor_quality_metrics
 print('Comparing all Metrics...'+",".join(all_metrics))
 path_all_metrics = f'./{results_folder}all_metrics.csv'
 if use_existing_metrics and os.path.exists(path_all_metrics):
@@ -482,7 +488,10 @@ elif compute_similarity_metrics and compute_noise_metrics and compute_sharpness_
     )
     df.to_csv(path_all_metrics)
 else:
-    df = pd.concat(df_results)
+    #df = pd.concat(df_results,axis=1)
+    df = pd.Dataframe(df_results[0])
+    for df_result in df_results[1:]:
+        df = pd.merge(df, df_result)
     # df = pd.DataFrame(0, index=[0], columns=['ds_modifier']+all_metrics); # empty df
 
 
