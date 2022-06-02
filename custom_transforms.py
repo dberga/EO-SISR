@@ -22,7 +22,8 @@ def blur_image(image, scale):
         img_tensor = transforms.ToTensor()(image).unsqueeze_(0) # pil2tensor
     # kornia's gaussian blur (using torch tensor)
     sigma = 0.5 * scale if scale is not None else 7.0
-    kernel_size = int(np.ceil(sigma * 3 + 4))
+    kernel_size = int(np.ceil(sigma * 3 + 4)) # kernel size is 3 times sigma + 4
+    kernel_size += 1 if kernel_size % 2 == 0 else 0 # can only be odd
     kernel_tensor = kornia.filters.get_gaussian_kernel2d((kernel_size, kernel_size), (sigma, sigma))
     image_blur = kornia.filters.filter2d(img_tensor, kernel_tensor[None])
     # change type back
