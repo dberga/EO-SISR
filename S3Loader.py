@@ -32,6 +32,7 @@ class ModelConfS3Loader():
         algo          = "FSRCNN",
         zoom          = 3,
         tmpdir        = "checkpoints/", #tempfile.TemporaryDirectory()
+        urldir        = None,
         kwargs        = {},
     ):
         
@@ -47,6 +48,7 @@ class ModelConfS3Loader():
         self.algo               =  algo
         self.zoom               =  zoom
         self.tmpdir             = tmpdir
+        self.urldir             = urldir
         self.kwargs             = kwargs
         
     def load_ai_model_and_stuff(self) -> List[Any]:
@@ -79,8 +81,11 @@ class ModelConfS3Loader():
             fn_dict_aux[k] = local_fn
             
             kind = ('weights' if k=='model' else 'config')
-            
-            url = f"https://{self.bucket_name}.s3-eu-west-1.amazonaws.com/iq-sisr-use-case/models/{kind}/{bucket_fn}"
+
+            if self.urldir is None:
+                url = f"https://{self.bucket_name}.s3-eu-west-1.amazonaws.com/iq-sisr-use-case/models/{kind}/{bucket_fn}"  # S3 folder pattern loadout
+            else:
+                url = urldir  # manual loadout from url
 
             print( url , ' ' , local_fn )
             
@@ -114,15 +119,14 @@ class ModelConfS3Loader():
         elif self.algo=='CAR':
             args = Args()
             args.SCALE = self.kwargs["SCALE"]
-            args.zoom = self.kwargs["zoom"]
+            args.zoom = self.zoom
             model = self._load_model_car(fn_dict_aux["model"], args.SCALE)
 
         elif self.algo=='SRGAN':
             args = Args()
             args.arch = self.kwargs["arch"]
-            args.zoom = self.kwargs["zoom"]
+            args.zoom = self.zoom
             model = self._load_model_srgan(fn_dict_aux["model"], args.arch )
-
         else:
             print(f"Error: unknown algo: {self.algo}")
             raise
@@ -190,7 +194,8 @@ class ModelConfS3Loader():
         device = torch.device('cuda')
         model = RRDBNet_arch.RRDBNet(3, 3, 64, 23, gc=32)
         #model.load_state_dict(torch.load(args.model_path), strict=True)
-        weights = torch.load(model_fn)
+        print(model_fn)
+        weights = torch.load(model_fn, map_location=device)
         model.load_state_dict(weights['params'])
         model.eval()
         model = model.to(device)

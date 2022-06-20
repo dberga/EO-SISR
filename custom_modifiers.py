@@ -328,8 +328,9 @@ class DSModifierSRGAN(DSModifier):
         ds_modifier: Optional[DSModifier] = None,
         params: Dict[str, Any] = {
             "arch": "srgan_2x2",
-            "model_path": "./models/srgan/weights/PSNR.pth",
-            "gpu": 0,
+            #"model_path": "./models/srgan/weights/PSNR.pth",
+            #"gpu": 0,
+            "model": "srgan/PSNR.pth",
             "seed": 666,
             "zoom": 2,
             "blur": False,
@@ -339,23 +340,26 @@ class DSModifierSRGAN(DSModifier):
     ):
         self.params = params
         self.ds_modifier = ds_modifier
+        self.params['algo'] = "SRGAN"
 
-        '''
         model_conf = ModelConfS3Loader(
-                model_fn      = params['model'],
+                model_fn      = self.params['model'],
                 config_fn_lst = [],
                 bucket_name   = "image-quality-framework",
-                algo          = "SRGAN",
+                algo          = self.params["algo"],
                 kwargs          = {"arch": params['arch'], "zoom": params['zoom']},
         )
-        self.model,_ = model_conf.load_ai_model_and_stuff()
-        ''' # save in self.params["model_path"]
-        algo = "SRGAN"
+        # save in self.params["model_path"]
+        self.params["model_path"] = os.path.join(model_conf.tmpdir,self.params["model"])
+        # Set name
         checkpoint_name = os.path.splitext(os.path.basename(self.params["model_path"]))[0]
-        subname = f"{algo}_arch_{self.params['arch']}_{checkpoint_name}_x{self.params['zoom']}" # _modifier
-        self.name = algo # f"sisr+{subname}"
-
-        self.SRGAN = SRGAN(arch=self.params["arch"],model_path=self.params["model_path"],gpu=self.params["gpu"],seed=self.params["seed"])
+        subname = f"{self.params['algo']}_arch_{self.params['arch']}_{checkpoint_name}_x{self.params['zoom']}" # _modifier
+        self.name = self.params['algo'] # f"sisr+{subname}"
+        # Init
+        self.SRGAN = SRGAN() # arch=self.params["arch"],model_path=self.params["model_path"],gpu=self.params["gpu"],seed=self.params["seed"]
+        # Load model
+        self.SRGAN.model,_ = model_conf.load_ai_model_and_stuff()
+        # Update Name
         self.params.update({"modifier": "{}".format(self._get_name())})
 
         if "zoom" in self.params.keys():
@@ -665,32 +669,44 @@ class DSModifierCAR(DSModifier):
         self,
         ds_modifier: Optional[DSModifier] = None,
         params: Dict[str, Any] = {
-            "SCALE": 2,
-            "model_dir": "./models/car/models",
-            "gpu": 0,
+            "model": "car/2x/usn.pth",
+            #"model_dir": "./models/car/models",
+            #"gpu": 0,
+            #"SCALE": 2,
             "zoom": 2,
             "blur": False,
             "resize_preprocess": True,
             "resize_postprocess": False,
         },
     ):
+        # only 2 checkpoints (scale 2 and scale 4)
+        if params["zoom"] == 2 or params["zoom"] == 4:
+            params["SCALE"] = params["zoom"]
+        elif params["zoom"] < 2:
+            params["SCALE"] = 2
+        else:
+            params["SCALE"] = 4
+
         self.params = params
         self.ds_modifier = ds_modifier
-        '''
+        self.params['algo'] = "CAR"
+
         model_conf = ModelConfS3Loader(
                 model_fn      = params['model'],
                 config_fn_lst = [],
                 bucket_name   = "image-quality-framework",
-                algo          = "CAR",
-                zoom          = params['SCALE'],
+                algo          = self.params['algo'],
+                zoom          = params["zoom"],
+                kwargs        = {"SCALE": params['SCALE']},
         )
-        self.model,_ = model_conf.load_ai_model_and_stuff()
-        ''' # save in self.params["model_dir"]
-        algo = "CAR"
-        subname = f"{algo}_scale{params['SCALE']}" # _modifier
-        self.name = algo # f"sisr+{subname}"
+        # update model path from S3 loaded
+        self.params["model_path"] = os.path.join(model_conf.tmpdir,self.params["model"])
+
+        subname = f"{self.params['algo']}_scale{self.params['SCALE']}" # _modifier
+        self.name = self.params['algo'] # f"sisr+{subname}"
         
-        self.CAR = CAR(SCALE=self.params["SCALE"],model_dir=self.params["model_dir"],gpu=self.params["gpu"])
+        self.CAR = CAR(SCALE=self.params["SCALE"]) # ,gpu=self.params["gpu"],model_dir=self.params["model_path"]
+        self.CAR.upscale_net,_ = model_conf.load_ai_model_and_stuff()
         self.params.update({"modifier": "{}".format(self._get_name())})
 
         if "zoom" in self.params.keys():
