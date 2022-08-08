@@ -9,6 +9,10 @@ ENV PATH=/usr/local/nvidia/bin:$PATH
 ENV LC_ALL=C.UTF-8
 ENV LANG=C.UTF-8
 
+RUN apt-key del 7fa2af80
+RUN apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/3bf863cc.pub
+RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys F60F4B3D7FA2AF80
+
 RUN apt-get update && apt-get install -y --no-install-recommends software-properties-common \
     libsm6 libxext6 libxrender-dev curl \
     && rm -rf /var/lib/apt/lists/*
