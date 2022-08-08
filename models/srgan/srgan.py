@@ -27,30 +27,31 @@ from custom_transforms import blur_image, rescale_image
 class SRGAN:
     def __init__(
         self,
-        arch="srgan_2x2",
-        model_path="./weights/PSNR.pth",
-        # pretrained=False,
         seed=666,
-        gpu=0, # set None to use cpu
+        gpu=torch.device('cuda'), #0, # set None to use cpu
+        #arch="srgan_2x2",
+        #model_path="./weights/PSNR.pth",
+        # pretrained=False,
     ):
         # Save some params
-        self.arch = arch
-        self.model_path = model_path
-        self.gpu = gpu
+        #self.arch = arch
+        #self.model_path = model_path
+        self.gpu = gpu #gpu
         self.seed = seed
 
         # Seed and / cuda Config
         self.model_names = sorted(name for name in models.__dict__ if name.islower() and not name.startswith("__") and callable(models.__dict__[name]))
         random.seed(seed)
         torch.manual_seed(seed)
-        cudnn.deterministic = True
 
-        # Load model
-        self.model = models.__dict__[arch]()
-        ''' 
-        if pretrained:
-            self.model = models.__dict__[arch](pretrained=True) # this crashes for latest implementations (model urls down)
+        # Load model # Init changed to load from S3Loader
         '''
+        #self.model = load_srgan_model(model_fn = self.model_path, arch = self.arch)
+        self.model = models.__dict__[arch]() # newest
+         
+        #if pretrained:
+        #    self.model = models.__dict__[arch](pretrained=True) # this crashes for latest implementations (model urls down)
+        
         if os.path.exists(model_path):
             self.model.load_state_dict(torch.load(model_path,map_location=torch.device("cpu")))
         
@@ -60,7 +61,8 @@ class SRGAN:
 
         # Set Eval mode
         self.model.eval()
-
+        '''
+        cudnn.deterministic = True
         cudnn.benchmark = True
     
     def run_sr_mod(self, img_file, rescale = False, zoom = 3, blur = False):
@@ -95,9 +97,9 @@ class SRGAN:
         return sr
 
 def load_srgan_model(model_fn = "./weights/PSNR.pth", arch = "srgan_2x2"):
-    device = torch.device('cuda')
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     model = models.__dict__[arch]()
-    model.load_state_dict(torch.load(model_fn))
+    model.load_state_dict(torch.load(model_fn, map_location=device))
     model = model.to(device)
     model.eval()
     return model

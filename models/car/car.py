@@ -22,36 +22,24 @@ class CAR:
     def __init__(
         self,
         SCALE=2, 
-        model_dir="./models",
-        gpu=0,
+        #model_dir="./models",
+        #gpu=0,
     ):
         # Save some params
-        self.model_dir = model_dir
-        self.gpu = gpu
+        #self.model_dir = model_dir
+        #self.gpu = gpu
 
         # Load Downsampler kernel characteristics
         self.SCALE = SCALE
         self.KSIZE = 3 * SCALE + 1
         self.OFFSET_UNIT = SCALE
 
-
         # Load nets
-        self.kernel_generation_net = DSN(k_size=self.KSIZE, scale=self.SCALE).cuda(gpu)
-        #self.downsampler_net = Downsampler(self.SCALE, self.KSIZE).cuda(gpu)
-        self.upscale_net = EDSR(32, 256, scale=self.SCALE).cuda(gpu)
-
-        self.kernel_generation_net = nn.DataParallel(self.kernel_generation_net, [0])
-        #self.downsampler_net = nn.DataParallel(self.downsampler_net, [0])
-        self.upscale_net = nn.DataParallel(self.upscale_net, [0])
-
-        self.kernel_generation_net.load_state_dict(torch.load(os.path.join(model_dir, '{0}x'.format(SCALE), 'kgn.pth')))
-        self.upscale_net.load_state_dict(torch.load(os.path.join(model_dir, '{0}x'.format(SCALE), 'usn.pth')))
-        torch.set_grad_enabled(False)
-
-        # Set nets to eval
-        self.kernel_generation_net.eval()
-        #self.downsampler_net.eval()
-        self.upscale_net.eval()
+        ''' # set to S3Loader
+        self.downsampler_net = load_car_downsampler(model_dir, SCALE, KSIZE)
+        self.upscale_net = load_car_model(model_dir, SCALE)
+        self.kernel_generation_net = load_car_kgn(model_dir, SCALE, KSIZE)
+        '''
     
     def run_upscale_mod(self, img_file, rescale = False, zoom = None, blur = False):
 
@@ -92,10 +80,29 @@ def pytensor2pil(img):
     return img
 
 def load_car_model(model_fn = "./models/2x/usn.pth", SCALE = 2):
-    device = torch.device('cuda')
-    model = EDSR(32, 256, scale=self.args.SCALE).cuda()
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    model = EDSR(32, 256, scale=SCALE) #.cuda()
     model = nn.DataParallel(model, [0])
-    model.load_state_dict(torch.load(model_fn)) #usn.pth
+    model.load_state_dict(torch.load(model_fn,map_location=device))
+    model = model.to(device)
+    model.eval()
+    torch.set_grad_enabled(False)
+    return model
+
+def load_car_kgn(model_fn = "./models/2x/kgn.pth", SCALE = 2, KSIZE = 7):
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    model = DSN(k_size=KSIZE, scale=SCALE) #.cuda(gpu)
+    model = nn.DataParallel(model, [0])
+    model.load_state_dict(torch.load(model_fn, map_location=device))
+    model.eval()
+    model = model.to(device)
+    return model
+
+def load_car_downsampler(model_fn = "./models/2x/dsn.pth", SCALE = 2, KSIZE = 7):
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    model = Downsampler(SCALE, KSIZE) #.cuda(gpu)
+    model = nn.DataParallel(model, [0])
+    model.load_state_dict(torch.load(model_fn, map_location=device))
     model.eval()
     model = model.to(device)
     return model
