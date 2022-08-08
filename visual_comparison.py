@@ -29,6 +29,12 @@ def scatter_plots(df,
     savefig = False,
     plots_folder = "plots/"):
     
+    print("plotting" + plots_folder)
+    print(metrics)
+    
+    # short names
+    df['ds_modifier'] = [name.split("_")[0] for name in df['ds_modifier'].values]
+    
     for pair_metrics in metrics:
 
         met1, met2 = pair_metrics
@@ -37,6 +43,7 @@ def scatter_plots(df,
         marker_lst = ["X","x","o","s","8","P","s","d"]
 
         for i in df.index:
+            print(len(df['ds_modifier'][i])>1)
             if len(df['ds_modifier'][i])>1:
                 if "LR" in df['ds_modifier'][i]:
                     marker = "x"
@@ -57,7 +64,7 @@ def scatter_plots(df,
 
         ax.set_xlabel(met1)
         ax.set_ylabel(met2)
-        ax.legend(title='Algorithms', bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax.legend(title='Algorithms', bbox_to_anchor=(.45, 1.15), loc="upper center") #bbox_to_anchor=(1.05, 1), loc='upper left')
         ax.grid(True)
         
         if savefig is True:
@@ -86,6 +93,10 @@ def visual_comp(
     savefig = False,
     comparison_folder = "comparison/",
     ):
+
+    # short names
+    lst_labels = [label.split("_")[0] for label in lst_labels]
+
     lst_lst = [glob(fr"{os.path.join(folder,'*')}") for folder in lst_folders]
     print(''.join([label+'\t     ' for label in lst_labels]))
 
@@ -128,18 +139,25 @@ def visual_comp(
             plt.show()
 
 def metric_comp(df, selected_metrics,savefig = False,plots_folder = "plots/"):
+
+    # short names
+    df['ds_modifier'] = [name.split("_")[0] for name in df['ds_modifier'].values]
+
     ev = ExperimentVisual(df, None)
     reference_metric = selected_metrics[0]
     for metric in selected_metrics:
-        ev.visualize(
-            plot_kind="bars",
-            xvar="ds_modifier",
-            yvar=metric,
-            legend_var=reference_metric,
-            title=""
-        )
+        try:
+            ev.visualize(
+                plot_kind="bars",
+                xvar="ds_modifier",
+                yvar=metric,
+                legend_var=reference_metric,
+                title=""
+            )
+        except:
+            print("visual comparison not working for" + metric)
     metrics_comparison = list(itertools.combinations(selected_metrics, 2))
-    scatter_plots(df, metrics_comparison, savefig, "plots/")
+    scatter_plots(df, metrics_comparison, savefig, plots_folder)
 
 def plotSNE(dataset_name="./Data/test-ds", images_folder="./Data/test-ds/test/", img_size=(232,232),shm_limit=6e4, crop = True, savefig = False,plots_folder = "plots/"):
     # create data loader
