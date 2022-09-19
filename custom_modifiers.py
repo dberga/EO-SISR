@@ -96,8 +96,8 @@ class DSModifierLR(DSModifier):
             rec_w, rec_h = rec_img.size
             orig_w, orig_h = pil_image.open(file_path).size
             if rec_w != orig_w or rec_h != orig_h or self.resize_postprocess is True:
+                print(f"{rec_w}x{rec_h} vs {orig_w}x{orig_h}")
                 rec_img = rescale_image_wh(rec_img, orig_w, orig_h)
-
             rec_img.save(dst_file)
             
         return input_name
@@ -317,8 +317,11 @@ class DSModifierFSRCNN(DSModifier):
             preds = model(lr).clamp(0.0, 1.0)
         preds = preds.mul(255.0).cpu().numpy().squeeze(0).squeeze(0)
         output = np.array([preds, ycbcr[..., 1], ycbcr[..., 2]]).transpose([1, 2, 0])
-        output = np.clip(convert_ycbcr_to_rgb(output), 0.0, 255.0).astype(np.uint8)
+        output = np.clip(convert_ycbcr_to_rgb(output), 0.0, 255.0).astype(np.uint8)        
+        rec_w = output.shape[1]
+        rec_h = output.shape[0]
         if self.resize_postprocess is True:
+            print(f"{rec_w}x{rec_h} vs {orig_w}x{orig_h}")
             output = rescale_image_wh(output, orig_w, orig_h)
         return output
 
@@ -408,8 +411,8 @@ class DSModifierSRGAN(DSModifier):
             rec_w, rec_h = rec_img.size
             orig_w, orig_h = pil_image.open(file_path).size
             if rec_w != orig_w or rec_h != orig_h or self.resize_postprocess is True:
+                print(f"{rec_w}x{rec_h} vs {orig_w}x{orig_h}")
                 rec_img = rescale_image_wh(rec_img, orig_w, orig_h) # downscale in case of 4x
-                
             rec_img.save(dst_file)
 
         return input_name
@@ -537,6 +540,8 @@ class DSModifierMSRN(DSModifier):
         orig_w, orig_h = pil_image.open(image_file).size
         wind_size  = loaded.shape[1]
         gpu_device = "0"
+        #import pdb; pdb.set_trace()
+        loaded = rescale_image_wh(loaded, int(orig_w*zoom), int(orig_h*zoom))
         res_output = 1/zoom # inria resolution
 
         if self.blur is True:
@@ -558,7 +563,10 @@ class DSModifierMSRN(DSModifier):
             padding=5,
             add_noise=self.add_noise,# None,
         )
+        rec_w = rec_img.shape[1]
+        rec_h = rec_img.shape[0]
         if self.resize_postprocess is True:
+            print(f"{rec_w}x{rec_h} vs {orig_w}x{orig_h}")
             rec_img = rescale_image_wh(rec_img, orig_w, orig_h)
         return rec_img
 
@@ -658,8 +666,11 @@ class DSModifierESRGAN(DSModifier):
         output = np.transpose(output[[2, 1, 0], :, :], (1, 2, 0))
         
         rec_img = (output*255).astype(np.uint8)
-        
+        rec_w = rec_img.shape[1]
+        rec_h = rec_img.shape[0]
+
         if self.resize_postprocess is True:
+            print(f"{rec_w}x{rec_h} vs {orig_w}x{orig_h}")
             rec_img = rescale_image_wh(rec_img, orig_w, orig_h)
         return rec_img
 
@@ -755,6 +766,7 @@ class DSModifierCAR(DSModifier):
             rec_w, rec_h = rec_img.size
             orig_w, orig_h = pil_image.open(file_path).size
             if rec_w != orig_w or rec_h != orig_h or self.resize_postprocess is True:
+                print(f"{rec_w}x{rec_h} vs {orig_w}x{orig_h}")
                 rec_img = rescale_image_wh(rec_img, orig_w, orig_h) # downscale in case of 4x
             
             rec_img.save(dst_file)
@@ -769,6 +781,7 @@ class DSModifierCAR(DSModifier):
         else:
             rec_img = self.CAR.run_upscale_mod(image_file, False, self.params['zoom'], self.blur)
             #rec_img = self.CAR.run_upscale(image_file)
+
         return rec_img
 
 class DSModifierLIIF(DSModifier):
@@ -917,7 +930,9 @@ class DSModifierLIIF(DSModifier):
                 print(f"Running {self.name} over {os.path.basename(image_file)}")
                 output = pil_image.fromarray((imgp*255).astype(np.uint8))
                 if self.resize_postprocess is True:
-                    rec_img = rescale_image_wh(output, orig_w, orig_h)
+                    rec_w, rec_h = output.size
+                    print(f"{rec_w}x{rec_h} vs {orig_w}x{orig_h}")  
+                    output = rescale_image_wh(output, orig_w, orig_h)
                 output.save( os.path.join(dst, os.path.basename(image_file)) )
                 #cv2.imwrite( os.path.join(dst, os.path.basename(image_file)), imgp )
             except Exception as e:
@@ -946,7 +961,6 @@ class DSModifierLIIF(DSModifier):
         pred = pred.view(*shape) \
             .permute(0, 1, 2, 3).contiguous()
         rec_img = pred.detach().cpu().numpy().squeeze()
-
 
         return rec_img
         
