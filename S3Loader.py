@@ -14,6 +14,7 @@ from models.fsrcnn.model_fsrcnn import FSRCNN
 from models.liif import models as models_liif
 from models.esrgan import esrgan
 from models.esrgan import RRDBNet_arch as RRDBNet_arch
+from models.msrn import msrn
 from models.msrn.msrn import load_msrn_model
 from models.car.car import load_car_model
 from models.srgan.srgan import load_srgan_model

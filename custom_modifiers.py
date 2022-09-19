@@ -443,8 +443,8 @@ class DSModifierMSRN(DSModifier):
         params['algo'] = 'MSRN'
         algo           = params['algo']
         subname = algo + '_'+os.path.splitext(params['model'])[0].replace('/','-')
-        self.name = algo # f"sisr+{subname}"
-        
+        self.name = subname # algo # f"sisr+{subname}"
+
         self.params: Dict[str, Any] = params
         self.ds_modifier = ds_modifier
         self.params.update({"modifier": "{}".format(self._get_name())})

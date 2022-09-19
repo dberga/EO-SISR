@@ -2,6 +2,7 @@ import torch
 from torch import nn
 import math
 
+
 # init ICNR to start from NN interpolation
 def ICNR(tensor, scale_factor=2, initializer=nn.init.kaiming_normal_):
     print('Tensor shape: ' + str(tensor.shape))
