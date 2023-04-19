@@ -3,11 +3,12 @@
 The Single Image Super Resolution (SISR) use case is build to compare the image quality between different SiSR solutions. A SiSR algorithm inputs one frame and outputs an image with greater resolution.
 These are the methods that are being compared in the use case:
 
-
-1. Fast Super-Resolution Convolutional Neural Network (FSRCNN)
-2. Local Implicit Image Function (LIIF)
-3. Multi-scale Residual Network (MSRN)
-4. Enhanced Super-Resolution Generative Adversarial Network (ESRGAN)
+1. Fast Super-Resolution Convolutional Neural Network (FSRCNN) [Ledig et al., 2016]
+2. Single Image Super-Resolution Generative Adversarial Networks (SRGAN) [Dong et al., 2016]
+3. Multi-scale Residual Network (MSRN) [Li et al., 2018]
+4. Enhanced Super-Resolution Generative Adversarial Networks (ESRGAN) [Wang et al., 2018]
+5. Content Adaptive Resampler (CAR) [Sun & Chen, 2019]
+6. Local Implicit Image Function (LIIF) [Chen et al., 2021]
 
 A use case in IQF usally involves wrapping a training within mlflow framework. In this case we estimate quality on the solutions offered by the different Dataset Modifiers which are the SISR algorithms. Similarity metrics against the Ground Truth are then compared.
 

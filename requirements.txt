@@ -6,3 +6,4 @@ tensorboardX
 tqdm
 imageio
 scikit-image
+lpips

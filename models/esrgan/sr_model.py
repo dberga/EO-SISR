@@ -3,12 +3,16 @@ from collections import OrderedDict
 from os import path as osp
 from tqdm import tqdm
 
-from archs.esrgan import build_network
-from losses.esrgan import build_loss
-from metrics.esrgan import calculate_metric
-from utils.esrgan import get_root_logger, imwrite, tensor2img
-from utils.esrgan.registry import MODEL_REGISTRY
+from .archs import build_network
+from .losses import build_loss
+from .utils.logger import get_root_logger
+from .utils.misc import imwrite, tensor2img
+from .utils.registry import MODEL_REGISTRY
 from .base_model import BaseModel
+
+import sys
+sys.path.append("../../metrics")
+from .metrics import calculate_metric
 
 
 @MODEL_REGISTRY.register()

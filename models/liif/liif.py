@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.liif.models import register
-from models.liif import models
-from utils.utils_liif import make_coord
+import models
+from .models import register, make
+from .utils_liif import make_coord
 
 
 @register('liif')
@@ -17,7 +17,7 @@ class LIIF(nn.Module):
         self.feat_unfold = feat_unfold
         self.cell_decode = cell_decode
 
-        self.encoder = models.make(encoder_spec)
+        self.encoder = make(encoder_spec)
 
         if imnet_spec is not None:
             imnet_in_dim = self.encoder.out_dim
@@ -26,7 +26,7 @@ class LIIF(nn.Module):
             imnet_in_dim += 2  # attach coord
             if self.cell_decode:
                 imnet_in_dim += 2
-            self.imnet = models.make(imnet_spec, args={'in_dim': imnet_in_dim})
+            self.imnet = make(imnet_spec, args={'in_dim': imnet_in_dim})
         else:
             self.imnet = None
 

@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 import models
 from models.liif.models import register
-from utils.utils_liif import make_coord
+from .utils_liif import make_coord
 
 
 @register('metasr')
