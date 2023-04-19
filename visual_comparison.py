@@ -17,6 +17,39 @@ from iquaflow.quality_metrics.dataloader import Dataset
 from torch.utils.data import DataLoader
 from sklearn.manifold import TSNE
 
+### Image differences
+
+def rgb(minimum, maximum, value):
+    minimum, maximum = float(minimum), float(maximum)
+    ratio = 2 * (value-minimum) / (maximum - minimum)
+    b = int(max(0, 255*(1 - ratio)))
+    r = int(max(0, 255*(ratio - 1)))
+    g = 255 - b - r
+    return r, g, b
+
+def normalize(arr1, arr2):
+    """
+    Linear normalization
+    """
+    arr1 = arr1.astype('float')
+    arr2 = arr2.astype('float')
+    for i in range(3):
+        arr1[...,i] -= arr2[...,i]
+        arr1[...,i] = abs(arr1[...,i])
+
+    for i in range(len(arr1)):
+        for j in range(len(arr1[i])):
+            avg = (arr1[i][j][0] + arr1[i][j][1] + arr1[i][j][2])/3
+            for k in range(3):
+                arr1[i][j][k] = avg
+    diff_mn = 0
+#    diff_mx = np.amax(arr1[...,...,0])
+    diff_mx = 10
+    for i in range(len(arr1)):
+        for j in range(len(arr1[i])):
+            (arr1[i][j][0], arr1[i][j][1], arr1[i][j][2]) = rgb(diff_mn, diff_mx, arr1[i][j][0])
+    return arr1 # astype('uint8')
+
 #########################
 # Visual comparison
 #########################
@@ -92,6 +125,8 @@ def visual_comp(
     ],
     savefig = False,
     comparison_folder = "comparison/",
+    max_img_size = 80,
+    max_enu = 100,
     ):
 
     # short names
@@ -101,10 +136,12 @@ def visual_comp(
     print(''.join([label+'\t     ' for label in lst_labels]))
 
     for enu,fn in enumerate(lst_lst[0]):
-        if enu>20:
+        if enu>max_enu:
             break
 
         n_alg = len(lst_lst)
+        #import pdb; pdb.set_trace()
+        #[ print(f) for f in lst_lst[i] if os.path.basename(f)==os.path.basename(fn) for i in range( n_alg ) ]
 
         arr_lst = [
             # cv2.imread( [ 
@@ -125,18 +162,59 @@ def visual_comp(
         
         if savefig is True:
             os.makedirs(comparison_folder,exist_ok=True)
-            plt.savefig(os.path.join(comparison_folder,os.path.basename(fn)))
+            plt.savefig(os.path.join(comparison_folder,os.path.basename(fn)+'.png')) # added png conversion
         else:
             plt.show()
         fig,ax = plt.subplots(1, n_alg ,figsize=(20,7), gridspec_kw={'wspace':0, 'hspace':0},squeeze=True)
         for i in range( n_alg ):
-            ax[i].imshow( arr_lst[i][75:-75:,75:-75:,:])
+            if (arr_lst[i].shape[0]<max_img_size) and (arr_lst[i].shape[1]<max_img_size):
+                ax[i].imshow( arr_lst[i])
+            else:
+                ax[i].imshow( arr_lst[i][max_img_size:-max_img_size:,max_img_size:-max_img_size:,:]) # zoom in
             ax[i].axis('off')
         if savefig is True:
             os.makedirs(comparison_folder,exist_ok=True)
-            plt.savefig(os.path.join(comparison_folder,"zoomed_"+os.path.basename(fn)))
+            plt.savefig(os.path.join(comparison_folder,"zoomed_"+os.path.basename(fn)+'.png')) # added png conversion
         else:
             plt.show()
+
+        #####################image differences here
+        print("Plotting Image differences")
+        comparison_folder_diffs = comparison_folder+"_diffs"
+        os.makedirs(comparison_folder_diffs,exist_ok=True)
+        fig,ax = plt.subplots(1, n_alg ,figsize=(20,7), gridspec_kw={'wspace':0, 'hspace':0},squeeze=True)
+        for i in range( n_alg ):
+            if i == 0:
+                ax[i].imshow( arr_lst[i])
+            else:
+                diff_img = normalize(arr_lst[0],arr_lst[i]).astype('uint8')
+                ax[i].imshow( diff_img)
+            ax[i].axis('off')
+        if savefig is True:
+            os.makedirs(comparison_folder,exist_ok=True)
+            plt.savefig(os.path.join(comparison_folder_diffs,os.path.basename(fn)+'.png')) # added png conversion
+        else:
+            plt.show()
+        fig,ax = plt.subplots(1, n_alg ,figsize=(20,7), gridspec_kw={'wspace':0, 'hspace':0},squeeze=True)
+        for i in range( n_alg ):
+            if i == 0:
+                if (arr_lst[i].shape[0]<max_img_size) and (arr_lst[i].shape[1]<max_img_size):
+                    ax[i].imshow( arr_lst[i],cmap='jet')
+                else:
+                    ax[i].imshow( arr_lst[i][max_img_size:-max_img_size:,max_img_size:-max_img_size:,:],cmap='jet') # zoom in
+            else:
+                diff_img = normalize(arr_lst[0],arr_lst[i]).astype('uint8')
+                if (diff_img.shape[0]<max_img_size) and (diff_img.shape[1]<max_img_size):
+                    ax[i].imshow( diff_img,cmap='jet')
+                else:
+                    ax[i].imshow( diff_img[max_img_size:-max_img_size:,max_img_size:-max_img_size:,:],cmap='jet') # zoom in
+            ax[i].axis('off')
+        if savefig is True:
+            os.makedirs(comparison_folder,exist_ok=True)
+            plt.savefig(os.path.join(comparison_folder_diffs,"zoomed_"+os.path.basename(fn)+'.png')) # added png conversion
+        else:
+            plt.show()
+
 
 def metric_comp(df, selected_metrics,savefig = False,plots_folder = "plots/"):
 
