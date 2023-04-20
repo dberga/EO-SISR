@@ -125,7 +125,7 @@ def visual_comp(
     ],
     savefig = False,
     comparison_folder = "comparison/",
-    max_img_size = 80,
+    max_img_size = 128,
     max_enu = 100,
     ):
 
@@ -167,10 +167,12 @@ def visual_comp(
             plt.show()
         fig,ax = plt.subplots(1, n_alg ,figsize=(20,7), gridspec_kw={'wspace':0, 'hspace':0},squeeze=True)
         for i in range( n_alg ):
-            if (arr_lst[i].shape[0]<max_img_size) and (arr_lst[i].shape[1]<max_img_size):
+            height = arr_lst[i].shape[0]
+            width = arr_lst[i].shape[1]
+            if (height<max_img_size) or (width<max_img_size):
                 ax[i].imshow( arr_lst[i])
             else:
-                ax[i].imshow( arr_lst[i][max_img_size:-max_img_size:,max_img_size:-max_img_size:,:]) # zoom in
+                ax[i].imshow( arr_lst[i][int(height*0.5)-int(max_img_size*0.5):int(height*0.5)+int(max_img_size*0.5),int(width*0.5)-int(max_img_size*0.5):int(width*0.5)+int(max_img_size*0.5),:]) # zoom in
             ax[i].axis('off')
         if savefig is True:
             os.makedirs(comparison_folder,exist_ok=True)
@@ -179,11 +181,12 @@ def visual_comp(
             plt.show()
 
         #####################image differences here
-        print("Plotting Image differences")
         comparison_folder_diffs = comparison_folder+"_diffs"
         os.makedirs(comparison_folder_diffs,exist_ok=True)
         fig,ax = plt.subplots(1, n_alg ,figsize=(20,7), gridspec_kw={'wspace':0, 'hspace':0},squeeze=True)
         for i in range( n_alg ):
+            height = arr_lst[i].shape[0]
+            width = arr_lst[i].shape[1]
             if i == 0:
                 ax[i].imshow( arr_lst[i])
             else:
@@ -197,17 +200,19 @@ def visual_comp(
             plt.show()
         fig,ax = plt.subplots(1, n_alg ,figsize=(20,7), gridspec_kw={'wspace':0, 'hspace':0},squeeze=True)
         for i in range( n_alg ):
+            height = arr_lst[i].shape[0]
+            width = arr_lst[i].shape[1]
             if i == 0:
-                if (arr_lst[i].shape[0]<max_img_size) and (arr_lst[i].shape[1]<max_img_size):
-                    ax[i].imshow( arr_lst[i],cmap='jet')
+                if (height<max_img_size) or (width<max_img_size):
+                    ax[i].imshow( arr_lst[i],cmap='rainbow')
                 else:
-                    ax[i].imshow( arr_lst[i][max_img_size:-max_img_size:,max_img_size:-max_img_size:,:],cmap='jet') # zoom in
+                    ax[i].imshow( arr_lst[i][int(height*0.5)-int(max_img_size*0.5):int(height*0.5)+int(max_img_size*0.5),int(width*0.5)-int(max_img_size*0.5):int(width*0.5)+int(max_img_size*0.5),:],cmap='rainbow') # zoom in
             else:
                 diff_img = normalize(arr_lst[0],arr_lst[i]).astype('uint8')
-                if (diff_img.shape[0]<max_img_size) and (diff_img.shape[1]<max_img_size):
-                    ax[i].imshow( diff_img,cmap='jet')
+                if (diff_img.shape[0]<max_img_size) or (diff_img.shape[1]<max_img_size):
+                    ax[i].imshow( diff_img,cmap='rainbow')
                 else:
-                    ax[i].imshow( diff_img[max_img_size:-max_img_size:,max_img_size:-max_img_size:,:],cmap='jet') # zoom in
+                    ax[i].imshow( diff_img[int(height*0.5)-int(max_img_size*0.5):int(height*0.5)+int(max_img_size*0.5),int(width*0.5)-int(max_img_size*0.5):int(width*0.5)+int(max_img_size*0.5),:],cmap='rainbow') # zoom in
             ax[i].axis('off')
         if savefig is True:
             os.makedirs(comparison_folder,exist_ok=True)
