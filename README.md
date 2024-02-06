@@ -1,9 +1,9 @@
 ![](https://github.com/satellogic/iquaflow/blob/main/docs/source/iquaflow_logo_mini.png)
-Check [QMRNet's article](https://www.mdpi.com/2072-4292/15/9/2451) and [IQUAFLOW's preprint](https://arxiv.org/abs/2210.13269) documentation
+Check [QMRNet's Remote Sensing article](https://www.mdpi.com/2072-4292/15/9/2451) and [iquaflow's JSTARS article](https://ieeexplore.ieee.org/abstract/document/10356628) for further documentation. You also can [install iquaflow with pip](https://pypi.org/project/iquaflow/) and look at the [iquaflow's wiki](https://iquaflow.readthedocs.io/en/latest/). 
 
 # IQUAFLOW - QMRNet for Benchmarking Image Super-Resolution
 
-- The rest of code is distributed in distinct repos [IQUAFLOW framework](https://github.com/satellogic/iquaflow), [QMRNet EO Dataset Evaluation Use Case](https://github.com/dberga/iquaflow-qmr-eo), [QMRNet's Loss for Super Resolution Optimization Use Case](https://github.com/dberga/iquaflow-qmr-loss) and [QMRNet standalone code](https://github.com/satellogic/iquaflow/tree/main/iquaflow/quality_metrics).
+- The rest of code is distributed in distinct repos [iquaflow framework](https://github.com/satellogic/iquaflow), [QMRNet EO Dataset Evaluation Use Case](https://github.com/dberga/iquaflow-qmr-eo), [QMRNet's Loss for Super Resolution Optimization Use Case](https://github.com/dberga/iquaflow-qmr-loss) and [QMRNet standalone code](https://github.com/satellogic/iquaflow/tree/main/iquaflow/quality_metrics).
 
 The Single Image Super Resolution (SISR) use case is build to compare the image quality between different SiSR solutions. A SiSR algorithm inputs one frame and outputs an image with greater resolution.
 These are the methods that are being compared in the use case:
