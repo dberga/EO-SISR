@@ -18,6 +18,7 @@ These are the methods that are being compared in the use case:
 
 A use case in IQF usally involves wrapping a training within mlflow framework. In this case we estimate quality on the solutions offered by the different Dataset Modifiers which are the SISR algorithms. Similarity metrics against the Ground Truth are then compared.
 
+- Note: Check a [jupyter notebook example](IQF-UseCase.ipynb) to run the use case.
 ____________________________________________________________________________________________________
 
 
