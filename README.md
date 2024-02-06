@@ -23,9 +23,8 @@ ________________________________________________________________________________
 
 
 ## To reproduce the experiments:
-
-1. `git clone git@publicgitlab.satellogic.com:iqf/iq-sisr-use-case.git`
-2. `cd iq-sisr-use-case`
+1. `git clone https://YOUR_GIT_TOKEN@github.com/dberga/iquaflow-qmr-sisr.git`
+2. `cd iquaflow-qmr-sisr`
 3. Then build the docker image with `make build`.(\*\*\*) This will also download required datasets and weights.
 4. In order to execute the experiments:
     - `make dockershell` (\*)
